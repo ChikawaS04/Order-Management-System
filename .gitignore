@@ -1,5 +1,5 @@
 target/
-!backend/.mvn/wrapper/maven-wrapper.jar
+!app/backend/.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
 .kotlin
