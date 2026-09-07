@@ -187,26 +187,27 @@ release a trading firm would actually pin, so 21 is the measurement target.
 
 ```
 Limit-Order-Management-System/
-  backend/
-    pom.xml
-    src/main/java/
-      Main.java                 # pipeline assembly and lifecycle
-      model/                    # Order, Side, Status, Trade
-      engine/                   # MatchingEngine, BookView, ExecutionListener,
+  app/
+    backend/
+      pom.xml
+      src/main/java/
+        Main.java               # pipeline assembly and lifecycle
+        model/                  # Order, Side, Status, Trade
+        engine/                 # MatchingEngine, BookView, ExecutionListener,
                                 #   MatchingEngineHandler
-      gateway/                  # OrderGateway, FixParser
-      event/                    # OrderEvent, ExecutionEvent, BookSnapshotEvent (+ factories),
+        gateway/                # OrderGateway, FixParser
+        event/                  # OrderEvent, ExecutionEvent, BookSnapshotEvent (+ factories),
                                 #   InboundPipeline, OutboundPipeline, SnapshotPipeline
-      net/                      # WebSocketServer, WebSocketPublisher, JsonToFix
-      market/                   # MarketDataService
-      util/                     # IDGenerator
-    src/test/java/
-      ...                       # unit and integration tests (JUnit 5)
-      benchmark/                # JMH benchmarks and the end-to-end latency harness
-  frontend/                     # React application (independent build)
+        net/                    # WebSocketServer, WebSocketPublisher, JsonToFix
+        market/                 # MarketDataService
+        util/                   # IDGenerator
+      src/test/java/
+        ...                     # unit and integration tests (JUnit 5)
+        benchmark/              # JMH benchmarks and the end-to-end latency harness
+    frontend/                   # React application (independent build)
 ```
 
-Maven runs from `backend/`, and npm runs from `frontend/`. The two build independently.
+Maven runs from `app/backend/`, and npm runs from `app/frontend/`. The two build independently.
 
 The matching engine is framework-free: the `event` carriers stay free of Disruptor types, and only
 their `*Factory` classes touch `com.lmax`. This keeps the core testable in isolation with no ring
@@ -221,7 +222,7 @@ buffer or network in the loop.
 Backend:
 
 ```bash
-cd backend
+cd app/backend
 mvn clean install
 mvn exec:java -Dexec.mainClass=Main
 ```
@@ -232,7 +233,7 @@ submit an order, and observe execution and book-snapshot frames pushed to subscr
 Frontend:
 
 ```bash
-cd frontend
+cd app/frontend
 npm install
 npm run dev
 ```
@@ -244,8 +245,8 @@ tape.
 
 ## Benchmarking
 
-Benchmarks live under `backend/src/test/java/benchmark/` and run through the JMH Maven plugin. They
-never run as part of `mvn test`; invocation is explicit. Run them from `backend/` in a shell with
+Benchmarks live under `app/backend/src/test/java/benchmark/` and run through the JMH Maven plugin. They
+never run as part of `mvn test`; invocation is explicit. Run them from `app/backend/` in a shell with
 JDK 21 active:
 
 ```bash
@@ -296,7 +297,7 @@ and the full pipeline end to end (a FIX message at the gateway through to an exe
 subscriber).
 
 ```bash
-cd backend
+cd app/backend
 mvn test
 ```
 

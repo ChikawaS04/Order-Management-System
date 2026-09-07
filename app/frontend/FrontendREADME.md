@@ -54,7 +54,7 @@ The server's entry point is `Main` at the root of `src/main/java` (no package). 
 `ws://localhost:8080/ws` and logs the endpoint plus copy-pasteable sample order JSON on
 startup.
 
-- **From IntelliJ (recommended):** open the Maven project at the repo root, let it sync
+- **From IntelliJ (recommended):** open the Maven project at `app/backend/`, let it sync
   dependencies, then run `Main` via the green gutter arrow (or right-click → *Run 'Main'*).
 - **Port:** defaults to `8080`; override with a single program argument
   (e.g. run config program arguments `9090`, or `<arg>` on the CLI). Unparseable input logs a
@@ -72,7 +72,7 @@ The endpoint the frontend expects: **`ws://localhost:8080/ws`** (no TLS — `ws:
 Requires **Node 20.19+ or 22.12+** (Vite 8). Check with `node -v` first.
 
 ```bash
-cd frontend          # run every command from inside frontend/, never the repo root
+cd app/frontend      # run every command from inside app/frontend/, never the repo root
 npm install          # first run only; commits package-lock.json
 npm run dev          # → http://localhost:5173
 ```
@@ -85,7 +85,7 @@ npm run test:watch   # vitest in watch mode
 npm run build        # tsc (strict typecheck) && vite build
 ```
 
-The socket URL is read from `frontend/.env`:
+The socket URL is read from `app/frontend/.env`:
 
 ```
 VITE_WS_URL=ws://localhost:8080/ws
@@ -245,7 +245,7 @@ If every step behaves as above, the round-trip is proven end to end and Phase 5 
 ## Project layout
 
 ```
-frontend/
+app/frontend/
   src/
     protocol/     # messages.ts (wire discriminated unions, parseServerFrame), encode.ts
     state/        # reducer.ts (pure), useOrderBook.ts (socket lifecycle)
