@@ -4,10 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="e1aea6c6-22a5-4fbf-ab3b-b1fb46959b08" name="Changes" comment="feat(clock): implement EpochNanoClock and wire shared instance (P7-1)&#10;&#10;Add EpochNanoClock — an affine epoch-nanos clock that anchors on&#10;System.currentTimeMillis() once at construction then advances via&#10;System.nanoTime() — so all timestamp sites (gateway receipt stamp,&#10;engine EXEC/BOOK stamps) share a single epoch-nanos domain.&#10;&#10;Wire one shared EpochNanoClock through Main into both OrderGateway and&#10;MatchingEngineHandler. Two-arg constructors on both classes are now&#10;public (previously package-private) to allow injection from the root&#10;package. The affine design preserves exact receipt→publish deltas for&#10;the §6.3 latency benchmark while landing absolute timestamps in a&#10;readable epoch domain.&#10;&#10;Add EpochNanoClockTest covering: affine-delta preservation, millis→nanos&#10;anchor conversion, non-decreasing output, and real-clock sanity bounds.">
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-    </list>
+    <list default="true" id="e1aea6c6-22a5-4fbf-ab3b-b1fb46959b08" name="Changes" comment="Some oopsies: merge conflicts due to outdated code in system, deleted dependencies during restructure, intellij pointing to deleted files." />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -86,6 +83,7 @@
     "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
     "RunOnceActivity.git.unshallow": "true",
     "RunOnceActivity.typescript.service.memoryLimit.init": "true",
+    "SHARE_PROJECT_CONFIGURATION_FILES": "true",
     "Vitest.TradeTape.executor": "Run",
     "codeWithMe.voiceChat.enabledByDefault": "false",
     "git-widget-placeholder": "main",
@@ -268,15 +266,7 @@
       <workItem from="1788565207343" duration="3835000" />
       <workItem from="1788632738394" duration="3195000" />
       <workItem from="1788731405360" duration="4296000" />
-      <workItem from="1788909954617" duration="5275000" />
-    </task>
-    <task id="LOCAL-00006" summary="Implemented matching for buy and sell orders">
-      <option name="closed" value="true" />
-      <created>1782440212592</created>
-      <option name="number" value="00006" />
-      <option name="presentableId" value="LOCAL-00006" />
-      <option name="project" value="LOCAL" />
-      <updated>1782440212592</updated>
+      <workItem from="1788909954617" duration="5648000" />
     </task>
     <task id="LOCAL-00007" summary="Implemented matching for buy and sell orders">
       <option name="closed" value="true" />
@@ -662,14 +652,21 @@
       <option name="project" value="LOCAL" />
       <updated>1788917843702</updated>
     </task>
-    <option name="localTasksCounter" value="55" />
+    <task id="LOCAL-00055" summary="Some oopsies: merge conflicts due to outdated code in system, deleted dependencies during restructure, intellij pointing to deleted files.">
+      <option name="closed" value="true" />
+      <created>1788922056884</created>
+      <option name="number" value="00055" />
+      <option name="presentableId" value="LOCAL-00055" />
+      <option name="project" value="LOCAL" />
+      <updated>1788922056884</updated>
+    </task>
+    <option name="localTasksCounter" value="56" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="feat(event): outbound pipeline — ExecutionEvent carrier, factory, Disruptor, adapter&#10;&#10;- ExecutionEvent / ExecutionEventType (SRS §3.4) + ExecutionEventFactory&#10;- OutboundPipeline: single-producer Disruptor&lt;ExecutionEvent&gt;, BlockingWaitStrategy,&#10;  fan-out subscribers each with their own sequence&#10;- MatchingEngineHandler: EventHandler&lt;OrderEvent&gt; + ExecutionListener; builds the&#10;  Order (domain validation fires here), drives matching, publishes one event per&#10;  fill plus accepted/cancelled/rejected. Injectable clock mirrors the gateway seam&#10;- Tests: CapturingExecutionHandler + accept/fill/partial/cancel/reject coverage" />
     <MESSAGE value="test(integration): end-to-end pipeline test (Step 8, SRS §6.2)&#10;&#10;Drive raw FIX wire bytes in at the front, assert ExecutionEvents at an&#10;outbound subscriber — the full path bytes -&gt; FixFrameDecoder -&gt; OrderGateway&#10;-&gt; inbound ring -&gt; MatchingEngineHandler -&gt; outbound ring -&gt; subscriber.&#10;&#10;- Option A framing: real FixFrameDecoder in an EmbeddedChannel; the test&#10;  plays the thin Netty-&gt;gateway adapter (production adapter is Phase 4),&#10;  draining each decoded byte[] frame into gateway.onFrame&#10;- Covers accept, full fill, partial-then-rested-remainder, cancel, reject&#10;  (unknown id), and a checksum-invalid frame dropped at the gateway boundary&#10;  (SRS §5.4) with nothing reaching the ring&#10;- Assertions match the 7.5 emission model verbatim: passive-price fills,&#10;  aggressor remaining, tradeId, trailing ACCEPTED for a rested remainder&#10;- Async-safe via CapturingExecutionHandler.awaitAtLeast; deterministic order&#10;  from single-consumer FIFO + synchronous in-callback publish" />
     <MESSAGE value="feat: Phase 4 depth pipeline — deps, empty-book fix, book snapshots (P4-0..P4-2)" />
     <MESSAGE value="feat(market,publisher): add outbound subscribers MarketDataService and TradeLogger (P4-3)&#10;&#10;Wire the two non-WebSocket subscribers of SRS §3.5 onto the outbound rings.&#10;&#10;- MarketDataService: rebuilt from a BookView pull-wrapper into an&#10;  EventHandler&lt;BookSnapshotEvent&gt; push consumer on the snapshot ring. Derives&#10;  best bid/ask, midpoint, and spread inside onEvent (slot-reuse safe) and&#10;  publishes a coherent immutable Quote via a single volatile store. Midpoint&#10;  stored exactly in half-cents; getMidpoint() keeps the Phase-1 whole-cent&#10;  contract, getMidpointHalfCents() gives the exact value. Constructor now no-arg&#10;  (BookView dependency dropped).&#10;- TradeLogger: new EventHandler&lt;ExecutionEvent&gt; server-side trade tape. Emits on&#10;  ORDER_FILLED / ORDER_PARTIALLY_FILLED only, silent on accept/cancel/reject.&#10;  SLF4J boundary logging; injectable Consumer sink for testability.&#10;- Tests: MarketDataServiceTest (7), TradeLoggerTest (8) — all green." />
@@ -694,6 +691,7 @@
     <MESSAGE value="test(bench): P6-5 snapshotInto allocation validation&#10;&#10;Add MatchingEngineSnapshotBenchmark (JMH, test scope) settling the&#10;P4-1 deferred question: does MatchingEngine.snapshotInto allocate on&#10;the read path, or does C2 escape analysis scalar-replace its&#10;enhanced-for map/deque iterators post-warmup?&#10;&#10;Verdict: prediction holds. gc.alloc.rate.norm is ~0 B/op across book&#10;depth 1..10000 (unresolvable at depth 1; 0.001-0.002 B/op at 10..10000,&#10;sampling noise; gc.count ~0, no collections). EA eliminates the only&#10;allocations, the non-escaping iterators. The cached-iterator and&#10;per-level-aggregate fixes P4-1 named stay unimplemented.&#10;&#10;Engine-in-isolation: MatchingEngine constructed directly, no&#10;Disruptor/Netty/listener. Book and reused BookSnapshotEvent target&#10;built once in @Setup(Level.Trial) since snapshotInto is read-only&#10;w.r.t. the book; ids from a benchmark-local counter, never&#10;util.IDGenerator. maxLevels fixed at MAX_DEPTH_LEVELS (10); @Param&#10;sweeps price levels per side {1,10,100,1000,10000}.&#10;&#10;As-built finding, no production change: model.Order rejects&#10;timeStamp &lt;= 0 as well as participantID &lt;= 0." />
     <MESSAGE value="Added README.md" />
     <MESSAGE value="feat(clock): implement EpochNanoClock and wire shared instance (P7-1)&#10;&#10;Add EpochNanoClock — an affine epoch-nanos clock that anchors on&#10;System.currentTimeMillis() once at construction then advances via&#10;System.nanoTime() — so all timestamp sites (gateway receipt stamp,&#10;engine EXEC/BOOK stamps) share a single epoch-nanos domain.&#10;&#10;Wire one shared EpochNanoClock through Main into both OrderGateway and&#10;MatchingEngineHandler. Two-arg constructors on both classes are now&#10;public (previously package-private) to allow injection from the root&#10;package. The affine design preserves exact receipt→publish deltas for&#10;the §6.3 latency benchmark while landing absolute timestamps in a&#10;readable epoch domain.&#10;&#10;Add EpochNanoClockTest covering: affine-delta preservation, millis→nanos&#10;anchor conversion, non-decreasing output, and real-clock sanity bounds." />
-    <option name="LAST_COMMIT_MESSAGE" value="feat(clock): implement EpochNanoClock and wire shared instance (P7-1)&#10;&#10;Add EpochNanoClock — an affine epoch-nanos clock that anchors on&#10;System.currentTimeMillis() once at construction then advances via&#10;System.nanoTime() — so all timestamp sites (gateway receipt stamp,&#10;engine EXEC/BOOK stamps) share a single epoch-nanos domain.&#10;&#10;Wire one shared EpochNanoClock through Main into both OrderGateway and&#10;MatchingEngineHandler. Two-arg constructors on both classes are now&#10;public (previously package-private) to allow injection from the root&#10;package. The affine design preserves exact receipt→publish deltas for&#10;the §6.3 latency benchmark while landing absolute timestamps in a&#10;readable epoch domain.&#10;&#10;Add EpochNanoClockTest covering: affine-delta preservation, millis→nanos&#10;anchor conversion, non-decreasing output, and real-clock sanity bounds." />
+    <MESSAGE value="Some oopsies: merge conflicts due to outdated code in system, deleted dependencies during restructure, intellij pointing to deleted files." />
+    <option name="LAST_COMMIT_MESSAGE" value="Some oopsies: merge conflicts due to outdated code in system, deleted dependencies during restructure, intellij pointing to deleted files." />
   </component>
 </project>
