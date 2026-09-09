@@ -4,14 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="e1aea6c6-22a5-4fbf-ab3b-b1fb46959b08" name="Changes" comment="Added README.md">
-      <change afterPath="$PROJECT_DIR$/backend/src/main/java/util/EpochNanoClock.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/src/test/java/util/EpochNanoClockTest.java" afterDir="false" />
+    <list default="true" id="e1aea6c6-22a5-4fbf-ab3b-b1fb46959b08" name="Changes" comment="feat(clock): implement EpochNanoClock and wire shared instance (P7-1)&#10;&#10;Add EpochNanoClock — an affine epoch-nanos clock that anchors on&#10;System.currentTimeMillis() once at construction then advances via&#10;System.nanoTime() — so all timestamp sites (gateway receipt stamp,&#10;engine EXEC/BOOK stamps) share a single epoch-nanos domain.&#10;&#10;Wire one shared EpochNanoClock through Main into both OrderGateway and&#10;MatchingEngineHandler. Two-arg constructors on both classes are now&#10;public (previously package-private) to allow injection from the root&#10;package. The affine design preserves exact receipt→publish deltas for&#10;the §6.3 latency benchmark while landing absolute timestamps in a&#10;readable epoch domain.&#10;&#10;Add EpochNanoClockTest covering: affine-delta preservation, millis→nanos&#10;anchor conversion, non-decreasing output, and real-clock sanity bounds.">
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/Main.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/Main.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/engine/MatchingEngineHandler.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/engine/MatchingEngineHandler.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/gateway/OrderGateway.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/gateway/OrderGateway.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/FrontendREADME.md" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/FrontendREADME.md" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -106,7 +101,7 @@
     "project.structure.last.edited": "Modules",
     "project.structure.proportion": "0.15",
     "project.structure.side.proportion": "0.2",
-    "settings.editor.selected.configurable": "preferences.pluginManager",
+    "settings.editor.selected.configurable": "terminal",
     "ts.external.directory.path": "C:\\Users\\ddavi\\IdeaProjects\\Limit-Order-Management-System\\frontend\\node_modules\\typescript\\lib",
     "vue.rearranger.settings.migration": "true"
   }
@@ -273,15 +268,7 @@
       <workItem from="1788565207343" duration="3835000" />
       <workItem from="1788632738394" duration="3195000" />
       <workItem from="1788731405360" duration="4296000" />
-      <workItem from="1788909954617" duration="2443000" />
-    </task>
-    <task id="LOCAL-00005" summary="Implementing logic for matching buy orders with best ask orders">
-      <option name="closed" value="true" />
-      <created>1782412959317</created>
-      <option name="number" value="00005" />
-      <option name="presentableId" value="LOCAL-00005" />
-      <option name="project" value="LOCAL" />
-      <updated>1782412959317</updated>
+      <workItem from="1788909954617" duration="5275000" />
     </task>
     <task id="LOCAL-00006" summary="Implemented matching for buy and sell orders">
       <option name="closed" value="true" />
@@ -667,14 +654,21 @@
       <option name="project" value="LOCAL" />
       <updated>1788734292297</updated>
     </task>
-    <option name="localTasksCounter" value="54" />
+    <task id="LOCAL-00054" summary="feat(clock): implement EpochNanoClock and wire shared instance (P7-1)&#10;&#10;Add EpochNanoClock — an affine epoch-nanos clock that anchors on&#10;System.currentTimeMillis() once at construction then advances via&#10;System.nanoTime() — so all timestamp sites (gateway receipt stamp,&#10;engine EXEC/BOOK stamps) share a single epoch-nanos domain.&#10;&#10;Wire one shared EpochNanoClock through Main into both OrderGateway and&#10;MatchingEngineHandler. Two-arg constructors on both classes are now&#10;public (previously package-private) to allow injection from the root&#10;package. The affine design preserves exact receipt→publish deltas for&#10;the §6.3 latency benchmark while landing absolute timestamps in a&#10;readable epoch domain.&#10;&#10;Add EpochNanoClockTest covering: affine-delta preservation, millis→nanos&#10;anchor conversion, non-decreasing output, and real-clock sanity bounds.">
+      <option name="closed" value="true" />
+      <created>1788917843701</created>
+      <option name="number" value="00054" />
+      <option name="presentableId" value="LOCAL-00054" />
+      <option name="project" value="LOCAL" />
+      <updated>1788917843702</updated>
+    </task>
+    <option name="localTasksCounter" value="55" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="Implemented the outbound ring buffer" />
     <MESSAGE value="feat(event): outbound pipeline — ExecutionEvent carrier, factory, Disruptor, adapter&#10;&#10;- ExecutionEvent / ExecutionEventType (SRS §3.4) + ExecutionEventFactory&#10;- OutboundPipeline: single-producer Disruptor&lt;ExecutionEvent&gt;, BlockingWaitStrategy,&#10;  fan-out subscribers each with their own sequence&#10;- MatchingEngineHandler: EventHandler&lt;OrderEvent&gt; + ExecutionListener; builds the&#10;  Order (domain validation fires here), drives matching, publishes one event per&#10;  fill plus accepted/cancelled/rejected. Injectable clock mirrors the gateway seam&#10;- Tests: CapturingExecutionHandler + accept/fill/partial/cancel/reject coverage" />
     <MESSAGE value="test(integration): end-to-end pipeline test (Step 8, SRS §6.2)&#10;&#10;Drive raw FIX wire bytes in at the front, assert ExecutionEvents at an&#10;outbound subscriber — the full path bytes -&gt; FixFrameDecoder -&gt; OrderGateway&#10;-&gt; inbound ring -&gt; MatchingEngineHandler -&gt; outbound ring -&gt; subscriber.&#10;&#10;- Option A framing: real FixFrameDecoder in an EmbeddedChannel; the test&#10;  plays the thin Netty-&gt;gateway adapter (production adapter is Phase 4),&#10;  draining each decoded byte[] frame into gateway.onFrame&#10;- Covers accept, full fill, partial-then-rested-remainder, cancel, reject&#10;  (unknown id), and a checksum-invalid frame dropped at the gateway boundary&#10;  (SRS §5.4) with nothing reaching the ring&#10;- Assertions match the 7.5 emission model verbatim: passive-price fills,&#10;  aggressor remaining, tradeId, trailing ACCEPTED for a rested remainder&#10;- Async-safe via CapturingExecutionHandler.awaitAtLeast; deterministic order&#10;  from single-consumer FIFO + synchronous in-callback publish" />
     <MESSAGE value="feat: Phase 4 depth pipeline — deps, empty-book fix, book snapshots (P4-0..P4-2)" />
@@ -699,6 +693,7 @@
     <MESSAGE value="P6-4: end-to-end latency benchmark (SRS §6.3 #2)&#10;&#10;Measure gateway-receipt -&gt; execution-publication latency (p50/p99/p99.9)&#10;across the real cross-thread pipeline: OrderGateway -&gt; inbound ring -&gt;&#10;MatchingEngineHandler -&gt; outbound ring, Netty stripped (WebSocket I/O is&#10;the separate §6.2 item, covered by WebSocketRoundTripTest).&#10;&#10;Standalone closed-loop runner, not a JMH @Benchmark: the op completes on a&#10;different thread from the one that starts it, so a naive @Benchmark over&#10;onFrame would time only the enqueue. Ingress = nanoTime at onFrame; egress =&#10;ExecutionEvent.timestamp (the handler's publish stamp). Both stamps already&#10;exist on their carriers (OrderEvent since Step 7, ExecutionEvent since 7.5),&#10;so the two are correlated by orderId with a single Semaphore handoff -- no&#10;carrier field added, no production change. 1,000,000 orders, 200k warmup&#10;discarded, exact percentiles by sorting a pre-allocated long[].&#10;&#10;Gated by -De2e.latency=true (excluded from mvn test and mvn jmh:benchmark).&#10;Run: mvn -q test -Dtest=EndToEndLatencyBenchmark -De2e.latency=true&#10;&#10;Result: p50 4.8us, p99 9.5us, p99.9 18.3us (single-fork, unpinned laptop).&#10;Finding: dominated by the BlockingWaitStrategy consumer wakeup, not matching&#10;(engine work is ~100-250ns per P6-1/P6-3) -- the latency lever is the wait&#10;strategy, the demo default flagged for revisit. Reported as closed-loop&#10;service-time under no queueing, NOT saturation latency.&#10;&#10;One new file under src/test/java/benchmark/. src/main/java untouched." />
     <MESSAGE value="test(bench): P6-5 snapshotInto allocation validation&#10;&#10;Add MatchingEngineSnapshotBenchmark (JMH, test scope) settling the&#10;P4-1 deferred question: does MatchingEngine.snapshotInto allocate on&#10;the read path, or does C2 escape analysis scalar-replace its&#10;enhanced-for map/deque iterators post-warmup?&#10;&#10;Verdict: prediction holds. gc.alloc.rate.norm is ~0 B/op across book&#10;depth 1..10000 (unresolvable at depth 1; 0.001-0.002 B/op at 10..10000,&#10;sampling noise; gc.count ~0, no collections). EA eliminates the only&#10;allocations, the non-escaping iterators. The cached-iterator and&#10;per-level-aggregate fixes P4-1 named stay unimplemented.&#10;&#10;Engine-in-isolation: MatchingEngine constructed directly, no&#10;Disruptor/Netty/listener. Book and reused BookSnapshotEvent target&#10;built once in @Setup(Level.Trial) since snapshotInto is read-only&#10;w.r.t. the book; ids from a benchmark-local counter, never&#10;util.IDGenerator. maxLevels fixed at MAX_DEPTH_LEVELS (10); @Param&#10;sweeps price levels per side {1,10,100,1000,10000}.&#10;&#10;As-built finding, no production change: model.Order rejects&#10;timeStamp &lt;= 0 as well as participantID &lt;= 0." />
     <MESSAGE value="Added README.md" />
-    <option name="LAST_COMMIT_MESSAGE" value="Added README.md" />
+    <MESSAGE value="feat(clock): implement EpochNanoClock and wire shared instance (P7-1)&#10;&#10;Add EpochNanoClock — an affine epoch-nanos clock that anchors on&#10;System.currentTimeMillis() once at construction then advances via&#10;System.nanoTime() — so all timestamp sites (gateway receipt stamp,&#10;engine EXEC/BOOK stamps) share a single epoch-nanos domain.&#10;&#10;Wire one shared EpochNanoClock through Main into both OrderGateway and&#10;MatchingEngineHandler. Two-arg constructors on both classes are now&#10;public (previously package-private) to allow injection from the root&#10;package. The affine design preserves exact receipt→publish deltas for&#10;the §6.3 latency benchmark while landing absolute timestamps in a&#10;readable epoch domain.&#10;&#10;Add EpochNanoClockTest covering: affine-delta preservation, millis→nanos&#10;anchor conversion, non-decreasing output, and real-clock sanity bounds." />
+    <option name="LAST_COMMIT_MESSAGE" value="feat(clock): implement EpochNanoClock and wire shared instance (P7-1)&#10;&#10;Add EpochNanoClock — an affine epoch-nanos clock that anchors on&#10;System.currentTimeMillis() once at construction then advances via&#10;System.nanoTime() — so all timestamp sites (gateway receipt stamp,&#10;engine EXEC/BOOK stamps) share a single epoch-nanos domain.&#10;&#10;Wire one shared EpochNanoClock through Main into both OrderGateway and&#10;MatchingEngineHandler. Two-arg constructors on both classes are now&#10;public (previously package-private) to allow injection from the root&#10;package. The affine design preserves exact receipt→publish deltas for&#10;the §6.3 latency benchmark while landing absolute timestamps in a&#10;readable epoch domain.&#10;&#10;Add EpochNanoClockTest covering: affine-delta preservation, millis→nanos&#10;anchor conversion, non-decreasing output, and real-clock sanity bounds." />
   </component>
 </project>
