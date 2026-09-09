@@ -1,37 +1,50 @@
 /**
- * Presentational depth ladder (SRS §3.7 depth chart).
+ * Presentational depth ladder (SRS §3.7 depth chart), refined in P7-4.
  *
- * Pure edge: takes the authoritative BOOK slice as a single prop and owns no
- * socket, hook, or state. It renders only from `book` — never from EXEC, and
- * never from anything derived from EXEC ordering (the load-bearing Phase-4
- * constraint).
+ * Pure edge: it renders only from the authoritative BOOK slice plus one derived
+ * scalar (the last trade price, for the divider). It owns no socket or hook and
+ * never reads EXEC or anything derived from EXEC ordering (the load-bearing
+ * Phase-4 constraint). The one piece of local state is the visible-depth
+ * selector, which re-slices the book already in hand with no refetch.
  *
- * Layout: asks on top in descending price (best ask sits at the bottom, nearest
- * the mid divider), bids below in descending price (best bid at the top, nearest
- * the divider). Each row carries a CSS depth bar whose width is proportional to
- * CUMULATIVE quantity outward from the mid.
+ * Layout, top to bottom: a depth selector, a Price / Size / Total caption, the
+ * ask side (highest price on top, best ask nearest the mid divider), a spread /
+ * mid / last strip, then the bid side (best bid on top, nearest the divider).
+ * Each row has three columns plus a CSS depth bar whose width is proportional to
+ * CUMULATIVE quantity outward from the touch.
  *
- * Bar scaling: SHARED max across both sides (both sides scale to the larger
- * side's total cumulative depth). This is the only scaling that renders bid/ask
- * imbalance truthfully — independent per-side scaling would paint a thin side
- * and a heavy side identically. Documented in the P5-2 as-built note.
+ * Bar scaling: SHARED max across both visible sides, so bid/ask imbalance renders
+ * truthfully rather than painting a thin side and a heavy side alike (the P5-2
+ * decision, now taken over the visible window so it rescales when the depth
+ * selector changes). buildLadder exposes the raw 0..1 shadeFraction and a 0..100
+ * widthPct derived from it; the component sizes the bar from widthPct.
  *
  * Cents in, dollars only at this render edge via format.ts. No float price math.
- * `-1` sentinels never surface as a price: row prices are always real levels
- * (server trims BOOK to the valid prefix), and the spread is guarded before the
- * subtraction so a `-1` top can't produce a bogus positive number.
+ * midpointLabel is imported from format.ts so this divider and the P7-3 header
+ * share one half-cent-safe definition. Sentinels never surface: rows are always
+ * real levels (BOOK is trimmed to the valid prefix server-side and replaced
+ * wholesale), and spread, mid, and last are each guarded before formatting.
  */
 
-import { centsToDollars, EMPTY_PRICE } from "../format";
+import { useState } from "react";
+
+import { centsToDollars, EMPTY_PRICE, midpointLabel } from "../format";
 import type { BookState } from "../state/reducer";
 import type { Level } from "../protocol/messages";
 
-/** One rendered ladder row: real price, its quantity, cumulative depth, bar width. */
+/** Selectable visible depth per side. Server trims BOOK to a <=10 prefix (P4-6),
+ *  so 14 shows at most what the server sends; it widens only if that prefix grows. */
+const DEPTH_OPTIONS = [8, 10, 14] as const;
+const DEFAULT_DEPTH = 10;
+
+/** One rendered ladder row: real price, its quantity, cumulative depth, shading. */
 export interface LadderRow {
     readonly priceCents: number;
     readonly qty: number;
     readonly cumQty: number;
-    /** 0..100, proportional to cumulative depth against the shared max. */
+    /** Cumulative depth as a fraction of the visible window's largest cumulative value, 0..1. */
+    readonly shadeFraction: number;
+    /** shadeFraction rendered as a 0..100 width for the inline depth bar. */
     readonly widthPct: number;
 }
 
@@ -47,7 +60,7 @@ interface CumLevel {
     readonly cumQty: number;
 }
 
-/** Running cumulative quantity, best-first (outward from the mid). */
+/** Running cumulative quantity, best-first (outward from the touch). */
 function cumulate(levels: readonly Level[]): CumLevel[] {
     const rows: CumLevel[] = [];
     let running = 0;
@@ -61,28 +74,37 @@ function cumulate(levels: readonly Level[]): CumLevel[] {
 /**
  * Pure depth-bar model. Unit-tested directly, separately from the component.
  *
- * `bids` arrive highest-first, `asks` lowest-first (both best-first), already
- * trimmed to <=10 real levels server-side — no client-side cap. Cumulative depth
- * is monotonic, so each side's total is its last element; the shared max is the
- * larger of the two, guarded so an empty book yields zero widths (never NaN).
+ * `bids` arrive highest-first, `asks` lowest-first (both best-first). Each side is
+ * first sliced to `depth` levels (the visible window; omitting `depth` means no
+ * cap, the pre-P7-4 behaviour, which keeps the BOOK's own server-trimmed prefix),
+ * then cumulated from the touch outward. Cumulative depth is monotonic, so each
+ * visible side's total is its last element; the shared max is the larger of the
+ * two, guarded so an empty window yields zero widths (never NaN). Every row
+ * carries the raw shadeFraction in [0,1] and widthPct = shadeFraction * 100.
  */
 export function buildLadder(
     bids: readonly Level[],
     asks: readonly Level[],
+    depth?: number,
 ): LadderModel {
-    const bidCum = cumulate(bids);
-    const askCum = cumulate(asks);
+    const limit = depth ?? Number.POSITIVE_INFINITY;
+    const bidCum = cumulate(bids.slice(0, limit));
+    const askCum = cumulate(asks.slice(0, limit));
 
     const maxBid = bidCum.length > 0 ? bidCum[bidCum.length - 1].cumQty : 0;
     const maxAsk = askCum.length > 0 ? askCum[askCum.length - 1].cumQty : 0;
     const sharedMax = Math.max(maxBid, maxAsk);
 
-    const withWidth = (r: CumLevel): LadderRow => ({
-        priceCents: r.priceCents,
-        qty: r.qty,
-        cumQty: r.cumQty,
-        widthPct: sharedMax > 0 ? (r.cumQty / sharedMax) * 100 : 0,
-    });
+    const withWidth = (r: CumLevel): LadderRow => {
+        const shadeFraction = sharedMax > 0 ? r.cumQty / sharedMax : 0;
+        return {
+            priceCents: r.priceCents,
+            qty: r.qty,
+            cumQty: r.cumQty,
+            shadeFraction,
+            widthPct: shadeFraction * 100,
+        };
+    };
 
     // asks: cumulate is lowest-first; reverse for display so the best ask lands
     // at the bottom, nearest the mid divider.
@@ -120,29 +142,82 @@ function renderRow(row: LadderRow, side: "ask" | "bid") {
             />
             <span className="depth-ladder__price">{centsToDollars(row.priceCents)}</span>
             <span className="depth-ladder__qty">{row.qty}</span>
+            <span className="depth-ladder__cum">{row.cumQty}</span>
         </div>
     );
 }
 
 interface DepthLadderProps {
     readonly book: BookState;
+    /**
+     * Last trade price in cents for the divider's Last cell. It is the newest tape
+     * print (App derives it as `tape[0].priceCents`), not part of the BOOK slice,
+     * so `buildLadder` stays book-only and pure. Defaults to the -1 sentinel, which
+     * renders blank, so the ladder is still valid before the first trade.
+     */
+    readonly lastCents?: number;
 }
 
-export function DepthLadder({ book }: DepthLadderProps) {
-    const { asks, bids } = buildLadder(book.bids, book.asks);
+export function DepthLadder({ book, lastCents = -1 }: DepthLadderProps) {
+    const [depth, setDepth] = useState<number>(DEFAULT_DEPTH);
+
+    const { asks, bids } = buildLadder(book.bids, book.asks, depth);
     const spread = spreadLabel(book.bestBid, book.bestAsk);
+    const mid = midpointLabel(book.bestBid, book.bestAsk);
+    const last = lastCents > 0 ? centsToDollars(lastCents) : EMPTY_PRICE;
 
     return (
         <div className="depth-ladder">
+            <div className="depth-ladder__controls">
+                <label className="depth-ladder__depth-label" htmlFor="depth-select">
+                    Depth
+                </label>
+                <select
+                    id="depth-select"
+                    className="depth-ladder__depth"
+                    data-testid="depth-select"
+                    value={depth}
+                    onChange={(e) => setDepth(Number(e.target.value))}
+                >
+                    {DEPTH_OPTIONS.map((n) => (
+                        <option key={n} value={n}>
+                            {n}
+                        </option>
+                    ))}
+                </select>
+            </div>
+
+            <div className="depth-ladder__head" aria-hidden="true">
+                <span className="depth-ladder__head-price">Price</span>
+                <span className="depth-ladder__head-qty">Size</span>
+                <span className="depth-ladder__head-cum">Total</span>
+            </div>
+
             <div className="depth-ladder__asks">
                 {asks.map((row) => renderRow(row, "ask"))}
             </div>
+
             <div className="depth-ladder__divider">
-                <span className="depth-ladder__spread-label">Spread</span>
-                <span className="depth-ladder__spread-value" data-testid="spread-value">
-          {spread}
+        <span className="depth-ladder__divider-cell">
+          <span className="depth-ladder__divider-label">Spread</span>
+          <span className="depth-ladder__divider-value" data-testid="spread-value">
+            {spread}
+          </span>
+        </span>
+                <span className="depth-ladder__divider-cell">
+          <span className="depth-ladder__divider-label">Mid</span>
+          <span className="depth-ladder__divider-value" data-testid="mid-value">
+            {mid}
+          </span>
+        </span>
+                <span className="depth-ladder__divider-cell">
+          <span className="depth-ladder__divider-label">Last</span>
+          <span className="depth-ladder__divider-value" data-testid="last-value">
+            {last}
+          </span>
         </span>
             </div>
+
             <div className="depth-ladder__bids">
                 {bids.map((row) => renderRow(row, "bid"))}
             </div>

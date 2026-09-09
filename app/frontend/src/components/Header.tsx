@@ -15,11 +15,12 @@
  *
  * The derivation is a pure exported helper (mirrors P5-2 buildLadder / P5-4
  * validateOrderInput) so it is unit-tested without a DOM. Spread cents/bps and
- * change are local pure helpers here so nothing duplicates or contradicts an
- * existing formatter.
+ * change stay local pure helpers here; the midpoint formatter moved to format.ts
+ * in P7-4 so this header and the depth-ladder divider share one definition
+ * instead of each keeping its own.
  */
 
-import { centsToDollars, EMPTY_PRICE } from "../format";
+import { centsToDollars, EMPTY_PRICE, midpointLabel } from "../format";
 import { ConnectionBadge } from "./ConnectionBadge";
 import type { BookState, ConnectionStatus, TapeEntry } from "../state/reducer";
 
@@ -61,20 +62,6 @@ export interface HeaderInput {
 /** Both tops present and real (guards the -1 empty-book sentinel). */
 function twoSided(bestBid: number, bestAsk: number): boolean {
     return bestBid > 0 && bestAsk > 0;
-}
-
-/**
- * Midpoint as a half-cent-safe dollar string, integer math only (no float on the
- * price path). The mid of two cent prices is (bid + ask) / 2, a half-cent when
- * the sum is odd; centsToDollars renders whole cents, so the trailing half-cent
- * is appended as "5": 15000/15025 gives "150.125". EMPTY_PRICE when not two-sided.
- */
-function midpointLabel(bestBid: number, bestAsk: number): string {
-    if (!twoSided(bestBid, bestAsk)) return EMPTY_PRICE;
-    const sum = bestBid + bestAsk;
-    const whole = (sum - (sum % 2)) / 2;
-    const base = centsToDollars(whole);
-    return sum % 2 === 0 ? base : `${base}5`;
 }
 
 /** Spread as an integer number of cents ("50"), or EMPTY_PRICE when one-sided. */

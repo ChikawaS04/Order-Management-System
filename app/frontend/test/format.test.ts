@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { centsToDollars, dollarsToCents, EMPTY_PRICE } from '../src/format'
+import { centsToDollars, dollarsToCents, EMPTY_PRICE, midpointLabel } from '../src/format'
 
 describe('centsToDollars', () => {
     it('formats sub-dollar values with a leading zero', () => {
@@ -31,6 +31,24 @@ describe('centsToDollars', () => {
         for (const cents of [1, 5, 100, 15020, 15025, 999999]) {
             expect(dollarsToCents(centsToDollars(cents))).toBe(cents)
         }
+    })
+})
+
+describe('midpointLabel', () => {
+    it('renders an even-sum mid to two places', () => {
+        expect(midpointLabel(15000, 15050)).toBe('150.25')
+        expect(midpointLabel(3, 5)).toBe('0.04')
+    })
+
+    it('renders an odd-sum mid with an exact trailing half-cent, no float drift', () => {
+        expect(midpointLabel(15000, 15025)).toBe('150.125')
+        expect(midpointLabel(1, 2)).toBe('0.015')
+    })
+
+    it('blanks to the empty marker when either side is the -1 sentinel', () => {
+        expect(midpointLabel(-1, 15025)).toBe(EMPTY_PRICE)
+        expect(midpointLabel(15000, -1)).toBe(EMPTY_PRICE)
+        expect(midpointLabel(-1, -1)).toBe(EMPTY_PRICE)
     })
 })
 

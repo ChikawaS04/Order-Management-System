@@ -13,6 +13,10 @@
  * P7-3: the Header now carries both the instrument row and the session row, and
  * the ConnectionBadge lives inside that session row, so the topbar holds only the
  * Header and passes it the state it renders from.
+ *
+ * P7-4: the depth ladder also takes the last-trade price (the newest tape print,
+ * or -1 before the first trade) for its spread/mid/last divider row; that is the
+ * only value it needs beyond the BOOK slice.
  */
 
 import { useOrderBook } from "./state/useOrderBook";
@@ -56,7 +60,10 @@ export default function App() {
             <main className="workspace">
                 <section className="panel panel--ladder" aria-label="Order book depth">
                     <h2 className="panel__title">Depth</h2>
-                    <DepthLadder book={state.book} />
+                    <DepthLadder
+                        book={state.book}
+                        lastCents={state.tape.length > 0 ? state.tape[0].priceCents : -1}
+                    />
                 </section>
 
                 <section className="panel panel--tape" aria-label="Trade tape">

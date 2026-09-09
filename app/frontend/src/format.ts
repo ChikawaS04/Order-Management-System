@@ -37,6 +37,32 @@ export function centsToDollars(cents: number): string {
 }
 
 /**
+ * Midpoint of two cent prices as a half-cent-safe dollar string, integer math
+ * only (no float on the price path). The mid is (bid + ask) / 2, a half-cent
+ * when the sum is odd; centsToDollars renders whole cents, so the trailing
+ * half-cent is appended as "5": 15000/15025 gives "150.125". EMPTY_PRICE unless
+ * both sides are real, guarding the -1 empty-book sentinel the same way every
+ * other formatter here does.
+ *
+ * Moved here in P7-4 (it began as a private helper in Header.tsx) so the header
+ * instrument row and the depth-ladder divider share one definition rather than
+ * each keeping its own copy of the half-cent logic.
+ *
+ *   15000, 15050 -> "150.25"
+ *   15000, 15025 -> "150.125"
+ *   -1,    15025 -> "—"
+ */
+export function midpointLabel(bestBid: number, bestAsk: number): string {
+    if (bestBid <= 0 || bestAsk <= 0) {
+        return EMPTY_PRICE
+    }
+    const sum = bestBid + bestAsk
+    const whole = (sum - (sum % 2)) / 2
+    const base = centsToDollars(whole)
+    return sum % 2 === 0 ? base : `${base}5`
+}
+
+/**
  * Parse a dollar string to integer cents, mirroring the backend parsePrice
  * policy (Phase 3): strictly positive, at most two decimal places, no float.
  *

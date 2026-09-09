@@ -1,5 +1,5 @@
 /*
- * OMS trading terminal theme (P5-5, header reworked P7-3).
+ * OMS trading terminal theme (P5-5, header reworked P7-3, depth ladder P7-4).
  *
  * Subject: a live limit-order-book terminal for one instrument (ASML), built as
  * a low-latency-systems portfolio piece; the reader is an engineer. The one bold
@@ -317,6 +317,52 @@ body {
     font-size: 13px;
 }
 
+/* Depth selector: a quiet control, never competing with the bars. */
+.depth-ladder__controls {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    padding: 0 8px 6px;
+}
+
+.depth-ladder__depth-label {
+    font-family: var(--sans);
+    font-size: 10px;
+    color: var(--text-dim);
+}
+
+.depth-ladder__depth {
+    padding: 2px 6px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    background: var(--surface-2);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Column captions for Price / Size / Total; same three-track grid as a row. */
+.depth-ladder__head {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    column-gap: 12px;
+    padding: 0 8px 4px;
+    font-family: var(--sans);
+    font-size: 9px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    border-bottom: 1px solid var(--line);
+}
+
+.depth-ladder__head-qty,
+.depth-ladder__head-cum {
+    text-align: right;
+    min-width: 48px;
+}
+
 .depth-ladder__asks,
 .depth-ladder__bids {
     display: flex;
@@ -330,11 +376,14 @@ body {
     justify-content: flex-end;
 }
 
+/* Three tracks: price (grows), size, cumulative total (both right-aligned). The
+   depth bar is absolutely positioned, so the grid does not affect it. */
 .depth-ladder__row {
     position: relative;
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    column-gap: 12px;
     align-items: center;
-    justify-content: space-between;
     height: 22px;
     padding: 0 8px;
     isolation: isolate;
@@ -371,14 +420,28 @@ body {
     color: var(--bid);
 }
 
+.depth-ladder__qty,
+.depth-ladder__cum {
+    text-align: right;
+    min-width: 48px;
+    font-variant-numeric: tabular-nums;
+}
+
 .depth-ladder__qty {
     color: var(--text-dim);
 }
 
+/* Cumulative total: the depth the bar encodes, kept legible but still quiet. */
+.depth-ladder__cum {
+    color: var(--text);
+}
+
+/* Spread / mid / last strip between the two sides. */
 .depth-ladder__divider {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 12px;
     padding: 6px 8px;
     margin: 2px 0;
     border-top: 1px solid var(--line-strong);
@@ -386,13 +449,19 @@ body {
     background: var(--surface-2);
 }
 
-.depth-ladder__spread-label {
+.depth-ladder__divider-cell {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+}
+
+.depth-ladder__divider-label {
     font-family: var(--sans);
     font-size: 10px;
     color: var(--text-dim);
 }
 
-.depth-ladder__spread-value {
+.depth-ladder__divider-value {
     font-family: var(--mono);
     font-variant-numeric: tabular-nums;
     font-weight: 600;
