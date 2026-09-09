@@ -57,11 +57,15 @@ public final class MatchingEngineHandler implements EventHandler<OrderEvent>, Ex
         this(engine, outbound, null, clock);
     }
 
-    // Package-private clock seam for tests (with depth feed).
-    MatchingEngineHandler(MatchingEngine engine,
-                          RingBuffer<ExecutionEvent> outbound,
-                          RingBuffer<BookSnapshotEvent> snapshots,
-                          LongSupplier clock) {
+    /**
+     * Clock injection point: both outbound rings plus an explicit time source.
+     * Public because Main (root package) wires the production EpochNanoClock in through
+     * here (P7-1); it is also the seam tests use to inject a deterministic clock.
+     */
+    public MatchingEngineHandler(MatchingEngine engine,
+                                 RingBuffer<ExecutionEvent> outbound,
+                                 RingBuffer<BookSnapshotEvent> snapshots,
+                                 LongSupplier clock) {
         this.engine = engine;
         this.outbound = outbound;
         this.snapshots = snapshots;

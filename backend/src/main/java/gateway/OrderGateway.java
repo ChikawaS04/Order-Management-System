@@ -64,25 +64,26 @@ public final class OrderGateway {
     private final LongSupplier clock;
 
     /**
-     * Production constructor. Receipt timestamps come from System.nanoTime().
+     * Default constructor: receipt timestamps come from System.nanoTime(), a monotonic
+     * source with an arbitrary origin. Suitable for tests and any caller that does not
+     * need epoch time.
      *
-     * nanoTime (not an epoch clock) because this stamp's real consumer is the
-     * end-to-end latency benchmark (SRS §6.3): receipt->publish is a sub-microsecond
-     * delta, and only a monotonic high-resolution source can resolve it. Allocation-
-     * free and correct for deltas. If a wall-clock value is ever needed for UI
-     * display, stamp that separately at the WebSocket edge, not this field.
+     * Production (Main) uses the two-arg form to inject the shared EpochNanoClock instead
+     * (P7-1), so Order.timeStamp lands in the same epoch-nanos domain as the outbound
+     * streams. That clock is affine over System.nanoTime(), so the receipt->publish delta
+     * the end-to-end latency benchmark measures (SRS §6.3) stays exact to the nanosecond;
+     * only the absolute origin differs.
      */
     public OrderGateway(RingBuffer<OrderEvent> ringBuffer) {
         this(ringBuffer, System::nanoTime);
     }
 
     /**
-     * Test seam: inject a deterministic clock so a test can assert the stamp.
-     * Package-private on purpose — keeps the injection point out of the public API.
-     * Also the knob to swap in an epoch source later (§6.3 / WebSocket) with no other
-     * gateway change.
+     * Clock injection point. Public because Main (root package) wires the shared
+     * EpochNanoClock in through here (P7-1); it is also the seam tests use to inject a
+     * deterministic clock so they can assert the receipt stamp.
      */
-    OrderGateway(RingBuffer<OrderEvent> ringBuffer, LongSupplier clock) {
+    public OrderGateway(RingBuffer<OrderEvent> ringBuffer, LongSupplier clock) {
         this.ringBuffer = ringBuffer;
         this.clock = clock;
     }

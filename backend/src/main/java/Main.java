@@ -8,6 +8,7 @@ import market.MarketDataService;
 import net.WebSocketServer;
 import publisher.TradeLogger;
 import publisher.WebSocketPublisher;
+import util.EpochNanoClock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,6 +42,13 @@ import java.util.concurrent.CountDownLatch;
  * <p><b>Startup order matters.</b> Outbound and snapshot consumers must be running before
  * inbound starts, or the engine publishes into rings nobody is draining. Shutdown is the
  * strict reverse: stop accepting input first, then drain inward-out.
+ *
+ * <p><b>Time (P7-1).</b> One {@link EpochNanoClock} is constructed here and shared by every
+ * timestamp site, so all observable stamps (EXEC, BOOK) and the gateway's receipt stamp
+ * (Order.timeStamp) live in one epoch-nanos domain. The clock is affine over
+ * System.nanoTime(), so inter-event deltas stay exact and the §6.3 latency benchmark is
+ * unaffected. Sharing ONE instance is load-bearing: two anchors would differ by the anchor
+ * skew, corrupting a receipt->publish delta.
  */
 public final class Main {
 
@@ -59,31 +67,38 @@ public final class Main {
         // --- 1. Engine ------------------------------------------------------------------
         MatchingEngine engine = new MatchingEngine();
 
-        // --- 2. Outbound rings (constructed; consumers registered below, started later) ---
+        // --- 2. Clock -------------------------------------------------------------------
+        // One epoch-nanos clock, shared by both the gateway (receipt stamp) and the engine
+        // handler (EXEC + BOOK stamps), so the whole system stamps in a single domain.
+        // Anchored once, here, at startup. Must be the SAME instance at both sites (P7-1).
+        EpochNanoClock clock = new EpochNanoClock();
+
+        // --- 3. Outbound rings (constructed; consumers registered below, started later) ---
         OutboundPipeline outbound = new OutboundPipeline();
         SnapshotPipeline snapshots = new SnapshotPipeline();
 
-        // --- 3. Engine handler: sole producer of BOTH outbound rings --------------------
+        // --- 4. Engine handler: sole producer of BOTH outbound rings --------------------
         MatchingEngineHandler engineHandler = new MatchingEngineHandler(
                 engine,
                 outbound.getRingBuffer(),
-                snapshots.getRingBuffer());
+                snapshots.getRingBuffer(),
+                clock);
 
         // Without this the engine reports nothing: fills are surfaced through the
         // ExecutionListener seam, which defaults to NO_OP.
         engine.setExecutionListener(engineHandler);
 
-        // --- 4. Inbound ring (attaches its consumer at construction) --------------------
+        // --- 5. Inbound ring (attaches its consumer at construction) --------------------
         InboundPipeline inbound = new InboundPipeline(engineHandler);
-        OrderGateway gateway = new OrderGateway(inbound.getRingBuffer());
+        OrderGateway gateway = new OrderGateway(inbound.getRingBuffer(), clock);
 
-        // --- 5. Network edge ------------------------------------------------------------
+        // --- 6. Network edge ------------------------------------------------------------
         // Constructed before the publisher: the server owns the ChannelGroup, which exists
         // at construction time (pre-start) and is the single source of truth for clients.
         WebSocketServer server = new WebSocketServer(port, gateway);
         WebSocketPublisher publisher = new WebSocketPublisher(server.getChannelGroup());
 
-        // --- 6. Register outbound subscribers (must precede start) ----------------------
+        // --- 7. Register outbound subscribers (must precede start) ----------------------
         // Independent consumers, each with its own sequence counter (§3.4) — none blocks
         // the others or the engine.
         TradeLogger tradeLogger = new TradeLogger();
@@ -92,7 +107,7 @@ public final class Main {
         outbound.handleEventsWith(publisher.executionHandler(), tradeLogger);
         snapshots.handleEventsWith(publisher.snapshotHandler(), marketData);
 
-        // --- 7. Start: outbound first, then inbound, then accept connections ------------
+        // --- 8. Start: outbound first, then inbound, then accept connections ------------
         outbound.start();
         snapshots.start();
         inbound.start();
