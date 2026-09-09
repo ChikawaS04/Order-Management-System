@@ -8,7 +8,7 @@
  *     consumers with separate sequence counters and interleave unpredictably,
  *     so book state can never be inferred from EXEC arrival order.
  *
- *  2. A passive resting order that is hit receives NO EXEC of its own — the
+ *  2. A passive resting order that is hit receives NO EXEC of its own. The
  *     engine fires one onFill per trade, naming the aggressor, and is silent on
  *     the passive side. Per-order fill progress therefore is not trackable for
  *     resting orders: such a row keeps its last known status and remaining
@@ -19,6 +19,11 @@
  *
  * Ordering WITHIN the EXEC stream is reliable (one ring, one sequence), so a
  * PARTIALLY_FILLED followed by its trailing ACCEPTED can be trusted.
+ *
+ * P7-3 adds the session state the header renders: sessionVolume, sessionOpenCents,
+ * a client-assigned msgSeqNum counter, and lastFrameNanos. The two aggregates are
+ * accumulated here rather than folded from the tape, which only holds the newest
+ * TAPE_CAP fills.
  */
 
 import { isFill } from "../protocol/messages";
@@ -26,6 +31,9 @@ import type { ClientFrame, ExecFrame, Level, ServerFrame, Side } from "../protoc
 
 /** Newest-first fill history cap. */
 export const TAPE_CAP = 200;
+
+/** Sentinel for "no session-open price yet": no trade has printed this session. */
+const SESSION_OPEN_UNSET = -1;
 
 export type ConnectionStatus = "connecting" | "open" | "reconnecting";
 
@@ -43,7 +51,7 @@ export function isTerminal(status: OrderStatus): boolean {
     return TERMINAL.includes(status);
 }
 
-/** Cancellable rows — used by the P5-4 OpenOrders panel. */
+/** Cancellable rows, used by the P5-4 OpenOrders panel. */
 export function isCancellable(status: OrderStatus): boolean {
     return status === "OPEN" || status === "PARTIALLY_FILLED";
 }
@@ -68,7 +76,7 @@ export interface TapeEntry {
 }
 
 /**
- * A locally originated order. Side and price are captured at SEND time — no EXEC
+ * A locally originated order. Side and price are captured at SEND time: no EXEC
  * frame carries a side, so they cannot come from the wire. Status and remaining
  * quantity come only from EXEC.
  */
@@ -87,6 +95,32 @@ export interface AppState {
     readonly tape: readonly TapeEntry[];
     /** Newest first. Keyed by clOrdId, which the server echoes as EXEC orderId. */
     readonly myOrders: readonly MyOrder[];
+    /**
+     * Total quantity traded this session. Accumulated per fill EXEC. One onFill per
+     * trade, aggressor-only, filledQuantity per-event (P7-0/Q7-2), so summing across
+     * fills cannot double count. Held here, never folded from the capped tape.
+     */
+    readonly sessionVolume: number;
+    /**
+     * The session's first trade price in cents. Set once by the first fill EXEC and
+     * never overwritten; SESSION_OPEN_UNSET until then. Session change is measured
+     * against this, never a previous close.
+     */
+    readonly sessionOpenCents: number;
+    /**
+     * Client-assigned outbound message counter. Incremented once per SENT frame,
+     * NEW and CANCEL alike. NOT the FIX 34= MsgSeqNum (the produced subset carries
+     * no tag 34, P7-0/Q7-4) and NOT the P7-2 server per-channel echo seqNum. It is
+     * labelled client-assigned wherever shown.
+     */
+    readonly msgSeqNum: number;
+    /**
+     * Epoch-nanos timestamp of the most recent frame received from the server, of
+     * any type (BOOK, EXEC, or the P7-2 FIX echo). A pure liveness marker for the
+     * session header; 0 until the first frame arrives. The epoch domain (P7-1) is
+     * what makes wall-clock rendering possible.
+     */
+    readonly lastFrameNanos: number;
 }
 
 export const EMPTY_BOOK: BookState = {
@@ -102,6 +136,10 @@ export const initialState: AppState = {
     book: EMPTY_BOOK,
     tape: [],
     myOrders: [],
+    sessionVolume: 0,
+    sessionOpenCents: SESSION_OPEN_UNSET,
+    msgSeqNum: 0,
+    lastFrameNanos: 0,
 };
 
 export type Action =
@@ -139,6 +177,9 @@ function applyExec(state: AppState, frame: ExecFrame): AppState {
         id > 0 && state.myOrders.some((o) => o.clOrdId === id);
 
     let tape = state.tape;
+    let sessionVolume = state.sessionVolume;
+    let sessionOpenCents = state.sessionOpenCents;
+
     if (isFill(frame)) {
         const entry: TapeEntry = {
             tradeId: frame.tradeId,
@@ -150,11 +191,20 @@ function applyExec(state: AppState, frame: ExecFrame): AppState {
             mine: knows(frame.aggressorOrderId) || knows(frame.passiveOrderId),
         };
         tape = [entry, ...state.tape].slice(0, TAPE_CAP);
+
+        // One onFill per trade, aggressor-only, filledQuantity is the per-event slice
+        // (P7-0/Q7-2), so this running sum is the true session quantity with no double
+        // count. Accumulated here precisely because the tape is capped.
+        sessionVolume = state.sessionVolume + frame.filledQuantity;
+
+        // The first trade sets the session-open reference, once and never again.
+        // frame.price is the resting/passive execution price (carried constraint 6).
+        // Prices are positive cents, so "<= 0" reads as "still unset".
+        if (sessionOpenCents <= 0) {
+            sessionOpenCents = frame.price;
+        }
     }
 
-    // EXEC orderId is the aggressor on fills, the cancelled/rejected order's id
-    // otherwise. An id we don't own means this report belongs to another client
-    // (or is a fill against our resting order, which carries no per-order update).
     const index = state.myOrders.findIndex((o) => o.clOrdId === frame.orderId);
     let myOrders = state.myOrders;
     if (index !== -1) {
@@ -165,25 +215,46 @@ function applyExec(state: AppState, frame: ExecFrame): AppState {
         }
     }
 
-    if (tape === state.tape && myOrders === state.myOrders) return state;
-    return { ...state, tape, myOrders };
+    // Every EXEC is a frame received from the server, so it advances the liveness
+    // marker even when it changes nothing else (a rejection for an unknown id, a
+    // passive fill against a foreign order). tape and myOrders keep their existing
+    // references on those no-op paths, so referential-equality checks on those
+    // slices still hold; only the top-level object is newly allocated.
+    return {
+        ...state,
+        tape,
+        myOrders,
+        sessionVolume,
+        sessionOpenCents,
+        lastFrameNanos: frame.timestamp,
+    };
 }
 
 function applySent(state: AppState, frame: ClientFrame): AppState {
-    // CANCEL deliberately records nothing: EXEC stays the sole authority on status,
-    // so a row remains OPEN and cancellable until ORDER_CANCELLED arrives.
-    if (frame.type !== "NEW") return state;
-    if (state.myOrders.some((o) => o.clOrdId === frame.clOrdId)) return state;
+    // MsgSeqNum counts every outbound frame that actually went on the wire, NEW and
+    // CANCEL alike: both are real FIX messages (35=D / 35=F) and each consumes a
+    // sequence number. `send` dispatches SENT only on a real socket write, so a
+    // no-op send while disconnected consumes nothing.
+    const msgSeqNum = state.msgSeqNum + 1;
 
-    const order: MyOrder = {
-        clOrdId: frame.clOrdId,
-        side: frame.side,
-        priceCents: frame.price,
-        originalQty: frame.qty,
-        remainingQty: frame.qty,
-        status: "PENDING",
-    };
-    return { ...state, myOrders: [order, ...state.myOrders] };
+    // Order-row bookkeeping is NEW-only and unchanged from P5-1: CANCEL records no
+    // row (EXEC stays the sole authority on status), and a duplicate clOrdId is
+    // ignored. Both paths keep the myOrders reference intact, so the counter can
+    // advance without disturbing the panel or its identity guarantees.
+    let myOrders = state.myOrders;
+    if (frame.type === "NEW" && !state.myOrders.some((o) => o.clOrdId === frame.clOrdId)) {
+        const order: MyOrder = {
+            clOrdId: frame.clOrdId,
+            side: frame.side,
+            priceCents: frame.price,
+            originalQty: frame.qty,
+            remainingQty: frame.qty,
+            status: "PENDING",
+        };
+        myOrders = [order, ...state.myOrders];
+    }
+
+    return { ...state, myOrders, msgSeqNum };
 }
 
 export function reducer(state: AppState, action: Action): AppState {
@@ -191,8 +262,10 @@ export function reducer(state: AppState, action: Action): AppState {
         case "CONNECTION": {
             if (action.status === state.connection) return state;
             // A stale ladder is worse than an empty one: any non-open state clears the
-            // book. myOrders and the tape survive — those orders may still be resting
-            // on the server, and the user's own record shouldn't vanish on a blip.
+            // book. Everything else survives: myOrders and tape (those orders may still
+            // be resting server-side), and the session aggregates + liveness marker,
+            // which belong to the browser session rather than the socket. A blip must
+            // not reset volume/open/msgSeqNum out from under a surviving tape.
             const book = action.status === "open" ? state.book : EMPTY_BOOK;
             return { ...state, connection: action.status, book };
         }
@@ -209,13 +282,16 @@ export function reducer(state: AppState, action: Action): AppState {
                         asks: frame.asks,
                         timestamp: frame.timestamp,
                     },
+                    lastFrameNanos: frame.timestamp,
                 };
             }
-            // FIX echo frames (P7-2) carry no application state — they are inspector
-            // material only, and the inspector's storage lands in P7-9. Dropped here
-            // deliberately: this branch is also what keeps the ExecFrame narrowing
-            // below sound now that ServerFrame is a three-way union.
-            if (frame.type === "FIX") return state;
+            if (frame.type === "FIX") {
+                // The FIX echo carries no application state (its inspector storage lands
+                // in P7-9), but it IS a frame the client received, so it advances the
+                // liveness marker and nothing else. This is the one behaviour the P7-2
+                // "inert" note anticipated changing.
+                return { ...state, lastFrameNanos: frame.timestamp };
+            }
             return applyExec(state, frame);
         }
         case "SENT":

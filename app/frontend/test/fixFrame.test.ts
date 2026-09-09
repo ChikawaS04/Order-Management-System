@@ -1,9 +1,14 @@
 /**
- * P7-2 — the FIX echo variant: parse narrowing and reducer neutrality.
+ * P7-2 / P7-3 — the FIX echo variant: parse narrowing and reducer effect.
  *
  * Kept in its own file rather than folded into protocol.test.ts / reducer.test.ts
  * because the two concerns here belong to one wire addition, and P7-9 will extend
  * this same surface when the inspector gains storage.
+ *
+ * Reducer effect changed in P7-3: a FIX echo is no longer fully inert. It carries
+ * no application state, but it IS a frame the client received, so it advances the
+ * lastFrameNanos liveness marker and nothing else. Every other slice keeps its
+ * reference.
  */
 
 import { describe, expect, it } from "vitest";
@@ -84,18 +89,23 @@ describe("FIX frame narrowing", () => {
     });
 });
 
-describe("FIX frames are inert in the reducer", () => {
-    it("returns the identical state object, touching nothing", () => {
+describe("FIX frames advance only the last-frame marker", () => {
+    it("updates lastFrameNanos and touches nothing else", () => {
         const fix = parseServerFrame(json(VALID)) as FixFrame;
         const action: Action = { type: "FRAME", frame: fix };
 
         const after = reducer(initialState, action);
 
-        // Identity, not deep equality: a FIX frame must not even allocate new state.
-        expect(after).toBe(initialState);
+        // The state object is new (a frame arrived), but every application slice keeps
+        // its reference: the FIX echo stores nothing until the P7-9 inspector.
+        expect(after).not.toBe(initialState);
+        expect(after.lastFrameNanos).toBe(VALID.timestamp);
         expect(after.book).toBe(initialState.book);
         expect(after.tape).toBe(initialState.tape);
         expect(after.myOrders).toBe(initialState.myOrders);
+        expect(after.sessionVolume).toBe(initialState.sessionVolume);
+        expect(after.sessionOpenCents).toBe(initialState.sessionOpenCents);
+        expect(after.msgSeqNum).toBe(initialState.msgSeqNum);
     });
 
     it("leaves an established book and tape untouched", () => {
@@ -114,7 +124,9 @@ describe("FIX frames are inert in the reducer", () => {
         const fix = parseServerFrame(json({ ...VALID, seqNum: 2 })) as FixFrame;
         const after = reducer(withBook, { type: "FRAME", frame: fix });
 
-        expect(after).toBe(withBook);
+        expect(after).not.toBe(withBook);
+        expect(after.lastFrameNanos).toBe(VALID.timestamp);
+        expect(after.book).toBe(withBook.book);
         expect(after.book.bids).toEqual([[15000, 10]]);
     });
 });
