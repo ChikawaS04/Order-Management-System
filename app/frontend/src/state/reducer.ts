@@ -1,5 +1,5 @@
 /**
- * Pure application state. No React, no socket, no side effects.
+ * The pure state core. No React, no socket, no side effects.
  *
  * Two rules dominate, both inherited from Phase 4:
  *
@@ -211,6 +211,11 @@ export function reducer(state: AppState, action: Action): AppState {
                     },
                 };
             }
+            // FIX echo frames (P7-2) carry no application state — they are inspector
+            // material only, and the inspector's storage lands in P7-9. Dropped here
+            // deliberately: this branch is also what keeps the ExecFrame narrowing
+            // below sound now that ServerFrame is a three-way union.
+            if (frame.type === "FIX") return state;
             return applyExec(state, frame);
         }
         case "SENT":

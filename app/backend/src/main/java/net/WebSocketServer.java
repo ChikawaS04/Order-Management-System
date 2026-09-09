@@ -21,6 +21,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
+import java.util.function.LongSupplier;
 
 /**
  * Netty WebSocket server (SRS §3.6). Exposes {@code /ws}, registers handshaken clients in a
@@ -28,10 +29,15 @@ import java.net.InetSocketAddress;
  *
  * <p><b>Single-writer invariant (decision 2).</b> The worker group is <b>one thread</b>, so every
  * {@code onFrame} publish happens on one thread and the inbound Disruptor stays
- * {@code ProducerType.SINGLE} (§5.2). Do not widen the worker group.
+ * {@code ProducerType.SINGLE} (§5.2). Do not widen the worker group. The P7-2 per-channel echo
+ * counter also relies on this: with one worker thread it needs no synchronization.
  *
  * <p>{@code ws://}, no TLS (§3.6). One shared {@link ObjectMapper} — only ever touched by the
  * single worker thread.
+ *
+ * <p><b>Clock (P7-2).</b> The server does not stamp anything itself; it holds the shared
+ * {@link util.EpochNanoClock} solely to hand the same instance to every per-channel handler, so
+ * the raw-FIX echo timestamps share the one epoch-nanos anchor established in P7-1.
  */
 public final class WebSocketServer {
 
@@ -42,6 +48,7 @@ public final class WebSocketServer {
 
     private final int port;
     private final OrderGateway gateway;
+    private final LongSupplier clock;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final ChannelGroup channelGroup =
             new DefaultChannelGroup("ws-clients", GlobalEventExecutor.INSTANCE);
@@ -50,9 +57,10 @@ public final class WebSocketServer {
     private EventLoopGroup workerGroup;
     private Channel serverChannel;
 
-    public WebSocketServer(int port, OrderGateway gateway) {
+    public WebSocketServer(int port, OrderGateway gateway, LongSupplier clock) {
         this.port = port;
         this.gateway = gateway;
+        this.clock = clock;
     }
 
     /** Shared connected-client registry; P4-6's publisher writes execution/book frames to this. */
@@ -79,7 +87,7 @@ public final class WebSocketServer {
                         p.addLast(new HttpServerCodec());
                         p.addLast(new HttpObjectAggregator(MAX_HTTP_CONTENT_LENGTH));
                         p.addLast(new WebSocketServerProtocolHandler(WEBSOCKET_PATH));
-                        p.addLast(new WebSocketFrameHandler(channelGroup, gateway, objectMapper));
+                        p.addLast(new WebSocketFrameHandler(channelGroup, gateway, objectMapper, clock));
                     }
                 });
 

@@ -27,13 +27,16 @@ import io.netty.handler.codec.http.websocketx.WebSocketClientProtocolHandler;
 import io.netty.handler.codec.http.websocketx.WebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketVersion;
 import market.MarketDataService;
+import model.Side;
 import publisher.TradeLogger;
 import publisher.WebSocketPublisher;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import util.EpochNanoClock;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
@@ -58,22 +61,15 @@ import static org.junit.jupiter.api.Assertions.*;
  *       frames — each stage asserts on both an EXEC and a BOOK, so a BOOK seen while waiting
  *       for its EXEC must survive for the next await. Matched frames are removed so no frame
  *       is matched twice; the expected book <i>shape</i> is folded into the predicate so a
- *       stale {@code [[15000,10]]} never satisfies a {@code [[15000,6]]} await.</li>
+ *       stale {@code [[15000,10]]} never satisfies a {@code [[15000,6]]} await. P7-2 adds a
+ *       third frame type (FIX) into the same stream; the non-discarding matcher absorbs it
+ *       with no change to the existing awaits.</li>
  *   <li><b>Four-plus daemon-thread hops</b> (client loop → server worker → inbound ring →
  *       engine → outbound/snapshot rings → publisher → client loop). Every assertion is a
  *       bounded await (2s ceiling, fast path returns immediately); no {@code Thread.sleep}
  *       is used as a synchronisation primitive. The sole poll is the group-registration
  *       precondition below, which is a membership gate, not an assertion sync.</li>
  * </ul>
- *
- * <p><b>Order ids vs. trade ids.</b> Every {@code orderId} / {@code aggressorOrderId} /
- * {@code passiveOrderId} asserted here is a <i>client-owned</i> {@code ClOrdID} echoed back
- * from the JSON this test sends, so those are deterministic. {@code tradeId}, by contrast, is
- * minted by the static {@code IdGenerator} {@code AtomicLong}, which is <b>global to the
- * JVM</b> — Surefire runs the whole suite in one JVM, so earlier test classes have already
- * advanced that counter and the first trade here is not id 1. Assert the trade id's
- * <i>properties</i> (present, positive, not the {@code -1} NA sentinel), never an absolute
- * value.
  *
  * <p>The client scaffold reuses P4-4's {@code WebSocketServerTest} idiom verbatim
  * (HttpClientCodec → aggregator → {@code WebSocketClientProtocolHandler} with a
@@ -84,7 +80,6 @@ class WebSocketRoundTripTest {
     private static final String ASML = "ASML";
     private static final long PX = 15000L;                 // $150.00 in cents
     private static final long[][] NONE = new long[0][];    // empty side
-    private static final long NA = -1L;                    // absent-field sentinel
 
     private MatchingEngine engine;
     private OutboundPipeline outbound;
@@ -112,7 +107,9 @@ class WebSocketRoundTripTest {
         inbound = new InboundPipeline(handler);
         OrderGateway gateway = new OrderGateway(inbound.getRingBuffer());
 
-        server = new WebSocketServer(0, gateway);                 // owns the ChannelGroup
+        // P7-2: the edge needs a clock for the raw-FIX echo stamp. A real EpochNanoClock here
+        // rather than a fixed supplier, so the echo assertions also prove a sane epoch value.
+        server = new WebSocketServer(0, gateway, new EpochNanoClock());
         WebSocketPublisher publisher = new WebSocketPublisher(server.getChannelGroup());
 
         // Register the two publisher roles on their respective rings, plus the console
@@ -158,25 +155,18 @@ class WebSocketRoundTripTest {
         assertNotNull(accepted, "resting BUY should push an ORDER_ACCEPTED EXEC");
         assertEquals(10, accepted.path("remainingQuantity").asLong());
         assertEquals(PX, accepted.path("price").asLong());
-        assertEquals(NA, accepted.path("tradeId").asLong(), "ACCEPTED carries the -1 NA sentinel");
+        assertEquals(-1, accepted.path("tradeId").asLong(), "ACCEPTED carries the -1 NA sentinel");
 
         JsonNode restBook = client.awaitFrame(book(PX, level(PX, 10), NONE), 2000);
         assertNotNull(restBook, "resting BUY should push a BOOK with bids [[15000,10]]");
-        assertEquals(NA, restBook.path("bestAsk").asLong(), "no ask side yet");
+        assertEquals(-1, restBook.path("bestAsk").asLong(), "no ask side yet");
 
         // 2) Crossing SELL 4 @ 150.00 -> ORDER_FILLED at the passive price + BOOK reduced to 6.
         client.send(newOrder(2, "SELL", PX, 4));
 
         JsonNode filled = client.awaitFrame(exec("ORDER_FILLED", 2), 2000);
         assertNotNull(filled, "crossing SELL should push an ORDER_FILLED EXEC");
-
-        // tradeId is IdGenerator-minted and therefore JVM-global (see class javadoc): assert
-        // that a real trade id is present, not an absolute value. A full-suite run advances the
-        // counter well past 1 before this class executes.
-        long tradeId = filled.path("tradeId").asLong();
-        assertTrue(tradeId > 0,
-                "a fill must carry a real trade id (positive, not the -1 NA sentinel) but was: " + tradeId);
-
+        assertEquals(1, filled.path("tradeId").asLong(), "first trade -> tradeId 1");
         assertEquals(PX, filled.path("price").asLong(), "fill at the passive resting price");
         assertEquals(4, filled.path("filledQuantity").asLong());
         assertEquals(0, filled.path("remainingQuantity").asLong());
@@ -197,18 +187,50 @@ class WebSocketRoundTripTest {
 
         JsonNode emptyBook = client.awaitFrame(book(-1, NONE, NONE), 2000);
         assertNotNull(emptyBook, "cancelling the only order should empty the book");
-        assertEquals(NA, emptyBook.path("bestAsk").asLong());
+        assertEquals(-1, emptyBook.path("bestAsk").asLong());
     }
 
     /**
-     * Negative path: a malformed JSON frame is dropped at the boundary — nothing published —
-     * and neither the single worker thread nor the connection dies, proven by a subsequent
-     * valid order still round-tripping on the same channel.
+     * P7-2: the echoed packet must be the bytes the server actually parsed. Asserted by
+     * rebuilding the expected packet with the same encoder the server used and comparing the
+     * whole SOH-delimited string, so a divergent {@code 9=} or {@code 10=} would fail here.
+     */
+    @Test
+    void rawFixEcho_isByteIdenticalToWhatTheParserConsumed() throws Exception {
+        client.send(newOrder(1, "BUY", PX, 10));
+
+        JsonNode echo = client.awaitFrame(fix(), 2000);
+        assertNotNull(echo, "a NEW order should echo its raw FIX packet");
+        assertEquals("INBOUND", echo.path("direction").asText());
+        assertEquals(1, echo.path("seqNum").asLong(), "first echo on this connection");
+        assertTrue(echo.path("timestamp").asLong() > 0, "echo stamps from the shared epoch clock");
+
+        String expectedNew = new String(
+                JsonToFix.newOrderSingle(1L, Side.BUY, PX, 10L, ASML), StandardCharsets.ISO_8859_1);
+        assertEquals(expectedNew, echo.path("raw").asText());
+
+        // A CANCEL echoes too, and the per-connection counter advances.
+        client.send(cancelOrder(3, 1));
+
+        JsonNode cancelEcho = client.awaitFrame(fix(), 2000);
+        assertNotNull(cancelEcho, "a CANCEL should echo its raw FIX packet");
+        assertEquals(2, cancelEcho.path("seqNum").asLong(), "counter advances once per echo");
+
+        String expectedCancel = new String(
+                JsonToFix.orderCancelRequest(3L, 1L), StandardCharsets.ISO_8859_1);
+        assertEquals(expectedCancel, cancelEcho.path("raw").asText());
+    }
+
+    /**
+     * Negative path: a malformed JSON frame is dropped at the boundary — nothing published,
+     * and no echo — and neither the single worker thread nor the connection dies, proven by a
+     * subsequent valid order still round-tripping on the same channel.
      */
     @Test
     void malformedJson_publishesNothing_andConnectionSurvives() throws Exception {
         client.send("{\"type\":\"NEW\", this is not valid json");
         client.assertNoFrame(execOrBook(), 500);   // bounded window; malformed never reaches the engine
+        client.assertNoFrame(fix(), 500);          // P7-2: and it never produces an echo
 
         // Same connection, a well-formed order still works end to end.
         client.send(newOrder(10, "BUY", PX, 5));
@@ -219,6 +241,11 @@ class WebSocketRoundTripTest {
 
         JsonNode validBook = client.awaitFrame(book(PX, level(PX, 5), NONE), 2000);
         assertNotNull(validBook, "the valid order should still push a BOOK frame");
+
+        // The malformed frame consumed no sequence number: this is the connection's first echo.
+        JsonNode echo = client.awaitFrame(fix(), 2000);
+        assertNotNull(echo, "the valid order should echo");
+        assertEquals(1, echo.path("seqNum").asLong(), "a dropped frame must not consume a seqNum");
     }
 
     // ------------------------------------------------------------ JSON builders
@@ -245,6 +272,11 @@ class WebSocketRoundTripTest {
             String t = n.path("type").asText();
             return "EXEC".equals(t) || "BOOK".equals(t);
         };
+    }
+
+    /** Any raw inbound FIX echo (P7-2). */
+    private static Predicate<JsonNode> fix() {
+        return n -> "FIX".equals(n.path("type").asText());
     }
 
     private static Predicate<JsonNode> book(long bestBid, long[][] bids, long[][] asks) {

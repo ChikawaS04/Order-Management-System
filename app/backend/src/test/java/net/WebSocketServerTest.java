@@ -23,6 +23,7 @@ import io.netty.handler.codec.http.websocketx.WebSocketVersion;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import util.EpochNanoClock;
 
 import java.net.URI;
 import java.util.concurrent.CountDownLatch;
@@ -42,7 +43,7 @@ class WebSocketServerTest {
         pipeline = new InboundPipeline(new CapturingOrderHandler());
         pipeline.start();
         OrderGateway gateway = new OrderGateway(pipeline.getRingBuffer());
-        server = new WebSocketServer(0, gateway); // ephemeral port
+        server = new WebSocketServer(0, gateway, new EpochNanoClock()); // ephemeral port
         server.start();
     }
 

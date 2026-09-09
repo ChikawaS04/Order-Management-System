@@ -2,7 +2,9 @@ package net;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import gateway.OrderGateway;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.group.ChannelGroup;
@@ -13,16 +15,42 @@ import model.Side;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.charset.StandardCharsets;
+import java.util.function.LongSupplier;
+
 /**
  * Per-connection tail handler for the WebSocket pipeline. On a completed handshake it registers
  * the channel in the shared {@link ChannelGroup} (P4-4); on a text frame it translates a manual
- * JSON order into FIX bytes and feeds the existing gateway (P4-5).
+ * JSON order into FIX bytes and feeds the existing gateway (P4-5), then echoes those exact bytes
+ * back to the originating channel (P7-2).
  *
  * <p>Registration happens on {@link WebSocketServerProtocolHandler.HandshakeComplete}, not
  * channelActive, so a still-upgrading HTTP channel never joins the broadcast group.
  * {@code DefaultChannelGroup} auto-removes on close, so there is no deregistration to maintain.
  *
  * <p>Not {@code @Sharable} — the server initializer creates one per channel.
+ *
+ * <p><b>Raw inbound FIX echo (P7-2).</b> The inspector must show the bytes the server actually
+ * parsed, not a browser-side reconstruction — there is no FIX encoder in the frontend, and
+ * rebuilding {@code 9=BodyLength} / {@code 10=CheckSum} client-side would invent exactly the two
+ * fields most likely to diverge. So after {@link OrderGateway#onFrame} consumes the byte array,
+ * the same array is serialized to a {@code FIX} JSON frame and written back to the originating
+ * channel <i>only</i>, never the group: another client's inspector must not show this client's
+ * packets. The echo is emitted after {@code onFrame} so observability never delays the inbound
+ * path, and only on a path that actually produced bytes — malformed JSON, an unknown type and an
+ * invalid side all return or throw before {@code fix} exists, so none of them echoes.
+ *
+ * <p><b>seqNum.</b> A per-channel outbound counter for this echo stream, incremented only when an
+ * echo is actually emitted. It is deliberately <i>not</i> the FIX {@code 34=} MsgSeqNum — the
+ * produced-and-parsed subset carries no tag 34/49/56/52 at all (P7-0/Q7-4) — and it mirrors no
+ * existing counter, because neither EXEC nor BOOK carries a sequence number on the wire. Because
+ * this handler is per-channel and the worker group is one thread, the counter is
+ * single-thread-confined and needs no atomic.
+ *
+ * <p><b>Latin-1 is load-bearing.</b> {@code raw} is decoded ISO-8859-1, a bijective byte-to-char
+ * map, so SOH (0x01) and every other byte survive exactly and the string maps back to the
+ * original array. Jackson escapes SOH as {@code \u0001}; {@code JSON.parse} restores it. That is
+ * what makes the byte-identity assertion in the tests exact rather than approximate.
  */
 public class WebSocketFrameHandler extends SimpleChannelInboundHandler<WebSocketFrame> {
 
@@ -32,10 +60,24 @@ public class WebSocketFrameHandler extends SimpleChannelInboundHandler<WebSocket
     private final OrderGateway gateway;
     private final ObjectMapper objectMapper;
 
-    public WebSocketFrameHandler(ChannelGroup channelGroup, OrderGateway gateway, ObjectMapper objectMapper) {
+    /**
+     * Shared {@link util.EpochNanoClock} instance (P7-1). Injected rather than read locally so the
+     * echo timestamp lands in the same epoch-nanos domain as the EXEC and BOOK stamps it sits
+     * beside in the P7-9 inspector. One anchor across every site is the load-bearing part.
+     */
+    private final LongSupplier clock;
+
+    /** Per-channel echo counter; single-thread-confined to this channel's event loop. */
+    private long fixSeqNum;
+
+    public WebSocketFrameHandler(ChannelGroup channelGroup,
+                                 OrderGateway gateway,
+                                 ObjectMapper objectMapper,
+                                 LongSupplier clock) {
         this.channelGroup = channelGroup;
         this.gateway = gateway;
         this.objectMapper = objectMapper;
+        this.clock = clock;
     }
 
     @Override
@@ -51,7 +93,7 @@ public class WebSocketFrameHandler extends SimpleChannelInboundHandler<WebSocket
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, WebSocketFrame frame) {
         if (frame instanceof TextWebSocketFrame text) {
-            handleOrderJson(text.text());
+            handleOrderJson(ctx.channel(), text.text());
         }
         // binary/ping/pong/close are handled upstream; ignore anything else here.
     }
@@ -62,8 +104,11 @@ public class WebSocketFrameHandler extends SimpleChannelInboundHandler<WebSocket
      * (§5.2). FixFrameDecoder is not needed — each WS frame is already exactly one message, so the
      * JsonToFix output goes straight to onFrame. Malformed input is logged and dropped at the
      * boundary (§5.4); onFrame independently logs+drops FIX-invalid frames.
+     *
+     * <p>The channel is threaded in (P7-2) purely so the echo can target the originating
+     * connection. Nothing else here consults it.
      */
-    private void handleOrderJson(String json) {
+    private void handleOrderJson(Channel channel, String json) {
         try {
             JsonNode node = objectMapper.readTree(json);
             String type = node.path("type").asText();
@@ -91,8 +136,31 @@ public class WebSocketFrameHandler extends SimpleChannelInboundHandler<WebSocket
             }
 
             gateway.onFrame(fix);
+            echoRawFix(channel, fix);
         } catch (Exception e) {
             log.warn("Dropping malformed WS order frame: {}", e.toString());
+        }
+    }
+
+    /**
+     * Write the raw inbound packet back to the originating channel as a {@code FIX} frame.
+     *
+     * <p>Guards its own failures rather than falling through to the caller's catch: a
+     * serialization problem here is an observability fault on a frame the engine has already
+     * accepted, and logging it as a malformed inbound order would be actively misleading.
+     * Serialization allocation is fine at this boundary (§5.1).
+     */
+    private void echoRawFix(Channel channel, byte[] fix) {
+        try {
+            ObjectNode frame = objectMapper.createObjectNode();
+            frame.put("type", "FIX");
+            frame.put("direction", "INBOUND");
+            frame.put("raw", new String(fix, StandardCharsets.ISO_8859_1));
+            frame.put("seqNum", ++fixSeqNum);
+            frame.put("timestamp", clock.getAsLong());
+            channel.writeAndFlush(new TextWebSocketFrame(objectMapper.writeValueAsString(frame)));
+        } catch (Exception e) {
+            log.warn("Failed to echo raw inbound FIX: {}", e.toString());
         }
     }
 

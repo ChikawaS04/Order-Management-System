@@ -43,11 +43,11 @@ import java.util.concurrent.CountDownLatch;
  * inbound starts, or the engine publishes into rings nobody is draining. Shutdown is the
  * strict reverse: stop accepting input first, then drain inward-out.
  *
- * <p><b>Time (P7-1).</b> One {@link EpochNanoClock} is constructed here and shared by every
- * timestamp site, so all observable stamps (EXEC, BOOK) and the gateway's receipt stamp
- * (Order.timeStamp) live in one epoch-nanos domain. The clock is affine over
- * System.nanoTime(), so inter-event deltas stay exact and the §6.3 latency benchmark is
- * unaffected. Sharing ONE instance is load-bearing: two anchors would differ by the anchor
+ * <p><b>Time (P7-1, extended P7-2).</b> One {@link EpochNanoClock} is constructed here and shared
+ * by every timestamp site, so all observable stamps (EXEC, BOOK), the gateway's receipt stamp
+ * (Order.timeStamp) and the raw-FIX echo stamp live in one epoch-nanos domain. The clock is
+ * affine over System.nanoTime(), so inter-event deltas stay exact and the §6.3 latency benchmark
+ * is unaffected. Sharing ONE instance is load-bearing: two anchors would differ by the anchor
  * skew, corrupting a receipt->publish delta.
  */
 public final class Main {
@@ -68,9 +68,10 @@ public final class Main {
         MatchingEngine engine = new MatchingEngine();
 
         // --- 2. Clock -------------------------------------------------------------------
-        // One epoch-nanos clock, shared by both the gateway (receipt stamp) and the engine
-        // handler (EXEC + BOOK stamps), so the whole system stamps in a single domain.
-        // Anchored once, here, at startup. Must be the SAME instance at both sites (P7-1).
+        // One epoch-nanos clock, shared by the gateway (receipt stamp), the engine handler
+        // (EXEC + BOOK stamps) and the WebSocket edge (P7-2 raw FIX echo stamp), so the whole
+        // system stamps in a single domain. Anchored once, here, at startup. Must be the SAME
+        // instance at every site (P7-1).
         EpochNanoClock clock = new EpochNanoClock();
 
         // --- 3. Outbound rings (constructed; consumers registered below, started later) ---
@@ -95,7 +96,7 @@ public final class Main {
         // --- 6. Network edge ------------------------------------------------------------
         // Constructed before the publisher: the server owns the ChannelGroup, which exists
         // at construction time (pre-start) and is the single source of truth for clients.
-        WebSocketServer server = new WebSocketServer(port, gateway);
+        WebSocketServer server = new WebSocketServer(port, gateway, clock);
         WebSocketPublisher publisher = new WebSocketPublisher(server.getChannelGroup());
 
         // --- 7. Register outbound subscribers (must precede start) ----------------------

@@ -6,8 +6,8 @@
  * a guide summary. Every price is integer cents in both directions; dollars
  * exist only at the render/parse edge (format.ts).
  *
- * Server -> client: BOOK (authoritative book state) | EXEC (notification).
- * Client -> server: NEW | CANCEL.
+ * Server -> client: BOOK (authoritative book state) | EXEC (notification) |
+ * FIX (raw inbound packet echo). Client -> server: NEW | CANCEL.
  */
 
 /** Single instrument; the server emits no symbol field, and expects this one inbound. */
@@ -63,7 +63,32 @@ export interface ExecFrame {
     readonly timestamp: number;
 }
 
-export type ServerFrame = BookFrame | ExecFrame;
+/**
+ * Raw inbound FIX packet echo (P7-2). `raw` is the exact SOH-delimited byte
+ * sequence that FixParser consumed, decoded Latin-1 server-side — not a
+ * client-side reconstruction, which is the whole point: the frontend has no FIX
+ * encoder, so a rebuilt packet would have to invent `9=BodyLength` and
+ * `10=CheckSum`. Those two fields are displayed verbatim by the P7-9 inspector
+ * and must never be recomputed here.
+ *
+ * `direction` is fixed at "INBOUND": the system is FIX in, JSON out, and the
+ * server builds no outbound tag-value message at all. Outbound entries in the
+ * inspector are the EXEC JSON frames, labelled as such.
+ *
+ * `seqNum` is the server's per-connection counter for this echo stream. It is
+ * NOT the FIX `34=` MsgSeqNum — the produced-and-parsed subset carries no tag
+ * 34/49/56/52 (P7-0/Q7-4), so the tag breakdown must not synthesize them — and
+ * it is NOT the client-assigned session counter shown in the header.
+ */
+export interface FixFrame {
+    readonly type: "FIX";
+    readonly direction: "INBOUND";
+    readonly raw: string;
+    readonly seqNum: number;
+    readonly timestamp: number;
+}
+
+export type ServerFrame = BookFrame | ExecFrame | FixFrame;
 
 export interface NewOrderFrame {
     readonly type: "NEW";
@@ -105,6 +130,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /** Integer-or-null. Callers must compare `=== null` — 0 is a legitimate value. */
 function int(value: unknown): number | null {
     return typeof value === "number" && Number.isInteger(value) ? value : null;
+}
+
+/** String-or-null. The empty string is not valid for any field that uses this. */
+function str(value: unknown): string | null {
+    return typeof value === "string" && value.length > 0 ? value : null;
 }
 
 function levels(value: unknown): Level[] | null {
@@ -182,6 +212,16 @@ export function parseServerFrame(raw: string): ServerFrame | null {
                 passiveOrderId,
                 timestamp,
             };
+        }
+        case "FIX": {
+            // direction is a fixed literal, not a free field: the server never echoes
+            // anything but inbound packets, so anything else is a contract violation.
+            if (parsed.direction !== "INBOUND") return null;
+            const rawPacket = str(parsed.raw);
+            const seqNum = int(parsed.seqNum);
+            const timestamp = int(parsed.timestamp);
+            if (rawPacket === null || seqNum === null || timestamp === null) return null;
+            return { type: "FIX", direction: "INBOUND", raw: rawPacket, seqNum, timestamp };
         }
         default:
             return null;

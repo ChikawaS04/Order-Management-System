@@ -4,7 +4,18 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="e1aea6c6-22a5-4fbf-ab3b-b1fb46959b08" name="Changes" comment="Some oopsies: merge conflicts due to outdated code in system, deleted dependencies during restructure, intellij pointing to deleted files." />
+    <list default="true" id="e1aea6c6-22a5-4fbf-ab3b-b1fb46959b08" name="Changes" comment="Nothing significant.">
+      <change afterPath="$PROJECT_DIR$/app/frontend/test/fixFrame.test.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/backend/src/main/java/Main.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/backend/src/main/java/Main.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/backend/src/main/java/net/WebSocketFrameHandler.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/backend/src/main/java/net/WebSocketFrameHandler.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/backend/src/main/java/net/WebSocketServer.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/backend/src/main/java/net/WebSocketServer.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/backend/src/test/java/net/WebSocketFrameHandlerTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/backend/src/test/java/net/WebSocketFrameHandlerTest.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/backend/src/test/java/net/WebSocketRoundTripTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/backend/src/test/java/net/WebSocketRoundTripTest.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/backend/src/test/java/net/WebSocketServerTest.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/backend/src/test/java/net/WebSocketServerTest.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/frontend/src/protocol/messages.ts" beforeDir="false" afterPath="$PROJECT_DIR$/app/frontend/src/protocol/messages.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/frontend/src/state/reducer.ts" beforeDir="false" afterPath="$PROJECT_DIR$/app/frontend/src/state/reducer.ts" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -100,7 +111,7 @@
     "project.structure.proportion": "0.15",
     "project.structure.side.proportion": "0.2",
     "settings.editor.selected.configurable": "terminal",
-    "ts.external.directory.path": "C:\\Users\\ddavi\\IdeaProjects\\Limit-Order-Management-System\\frontend\\node_modules\\typescript\\lib",
+    "ts.external.directory.path": "C:\\Users\\ddavi\\AppData\\Roaming\\JetBrains\\IntelliJIdea2026.1\\plugins\\javascript-plugin\\jsLanguageServicesImpl\\external",
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
@@ -117,7 +128,7 @@
       <recent name="" />
     </key>
   </component>
-  <component name="RunManager" selected="Application.DefaultConfig">
+  <component name="RunManager" selected="Vitest.FIX frame narrowing">
     <configuration name="DefaultConfig" type="Application" factoryName="Application">
       <option name="ALTERNATIVE_JRE_PATH" value="25" />
       <option name="ALTERNATIVE_JRE_PATH_ENABLED" value="true" />
@@ -142,16 +153,16 @@
         <option name="Make" enabled="true" />
       </method>
     </configuration>
-    <configuration name="WebSocketPublisherTest" type="JUnit" factoryName="JUnit" temporary="true" nameIsGenerated="true">
+    <configuration name="WebSocketFrameHandlerTest" type="JUnit" factoryName="JUnit" temporary="true" nameIsGenerated="true">
       <module name="OrderBookDemo" />
       <extension name="coverage">
         <pattern>
-          <option name="PATTERN" value="publisher.*" />
+          <option name="PATTERN" value="net.*" />
           <option name="ENABLED" value="true" />
         </pattern>
       </extension>
-      <option name="PACKAGE_NAME" value="publisher" />
-      <option name="MAIN_CLASS_NAME" value="publisher.WebSocketPublisherTest" />
+      <option name="PACKAGE_NAME" value="net" />
+      <option name="MAIN_CLASS_NAME" value="net.WebSocketFrameHandlerTest" />
       <option name="TEST_OBJECT" value="class" />
       <method v="2">
         <option name="Make" enabled="true" />
@@ -187,34 +198,32 @@
         <option name="Make" enabled="true" />
       </method>
     </configuration>
-    <configuration name="TradeTape" type="JavaScriptTestRunnerVitest" temporary="true" nameIsGenerated="true">
+    <configuration name="FIX frame narrowing" type="JavaScriptTestRunnerVitest" temporary="true" nameIsGenerated="true">
       <node-interpreter value="project" />
-      <vitest-package value="$PROJECT_DIR$/frontend/node_modules/vitest" />
-      <working-dir value="$PROJECT_DIR$/frontend" />
       <vitest-options value="--run" />
       <envs />
       <scope-kind value="SUITE" />
-      <test-file value="$PROJECT_DIR$/frontend/test/tradeTape.test.tsx" />
+      <test-file value="$PROJECT_DIR$/app/frontend/test/fixFrame.test.ts" />
       <test-names>
-        <test-name value="TradeTape" />
+        <test-name value="FIX frame narrowing" />
       </test-names>
       <method v="2" />
     </configuration>
     <list>
       <item itemvalue="Application.DefaultConfig" />
       <item itemvalue="JUnit.EpochNanoClockTest" />
-      <item itemvalue="JUnit.WebSocketPublisherTest" />
+      <item itemvalue="JUnit.WebSocketFrameHandlerTest" />
       <item itemvalue="JUnit.WebSocketRoundTripTest" />
       <item itemvalue="JUnit.WebSocketServerTest" />
-      <item itemvalue="Vitest.TradeTape" />
+      <item itemvalue="Vitest.FIX frame narrowing" />
     </list>
     <recent_temporary>
       <list>
-        <item itemvalue="JUnit.EpochNanoClockTest" />
-        <item itemvalue="Vitest.TradeTape" />
-        <item itemvalue="JUnit.WebSocketRoundTripTest" />
-        <item itemvalue="JUnit.WebSocketPublisherTest" />
+        <item itemvalue="Vitest.FIX frame narrowing" />
         <item itemvalue="JUnit.WebSocketServerTest" />
+        <item itemvalue="JUnit.WebSocketRoundTripTest" />
+        <item itemvalue="JUnit.WebSocketFrameHandlerTest" />
+        <item itemvalue="JUnit.EpochNanoClockTest" />
       </list>
     </recent_temporary>
   </component>
@@ -266,15 +275,7 @@
       <workItem from="1788565207343" duration="3835000" />
       <workItem from="1788632738394" duration="3195000" />
       <workItem from="1788731405360" duration="4296000" />
-      <workItem from="1788909954617" duration="5648000" />
-    </task>
-    <task id="LOCAL-00007" summary="Implemented matching for buy and sell orders">
-      <option name="closed" value="true" />
-      <created>1782445968939</created>
-      <option name="number" value="00007" />
-      <option name="presentableId" value="LOCAL-00007" />
-      <option name="project" value="LOCAL" />
-      <updated>1782445968939</updated>
+      <workItem from="1788909954617" duration="8889000" />
     </task>
     <task id="LOCAL-00008" summary="feat: implement order submission, cancellation, and book display&#10;&#10;- addOrder: routes to matchBuy/matchSell, rests unfilled quantity&#10;- addToBook: inserts order into price level queue via computeIfAbsent&#10;- cancelOrder: marks order cancelled and removes from book with O(n) lookup&#10;- printBook: displays current bid/ask book state">
       <option name="closed" value="true" />
@@ -660,14 +661,21 @@
       <option name="project" value="LOCAL" />
       <updated>1788922056884</updated>
     </task>
-    <option name="localTasksCounter" value="56" />
+    <task id="LOCAL-00056" summary="Nothing significant.">
+      <option name="closed" value="true" />
+      <created>1788922109296</created>
+      <option name="number" value="00056" />
+      <option name="presentableId" value="LOCAL-00056" />
+      <option name="project" value="LOCAL" />
+      <updated>1788922109296</updated>
+    </task>
+    <option name="localTasksCounter" value="57" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="test(integration): end-to-end pipeline test (Step 8, SRS §6.2)&#10;&#10;Drive raw FIX wire bytes in at the front, assert ExecutionEvents at an&#10;outbound subscriber — the full path bytes -&gt; FixFrameDecoder -&gt; OrderGateway&#10;-&gt; inbound ring -&gt; MatchingEngineHandler -&gt; outbound ring -&gt; subscriber.&#10;&#10;- Option A framing: real FixFrameDecoder in an EmbeddedChannel; the test&#10;  plays the thin Netty-&gt;gateway adapter (production adapter is Phase 4),&#10;  draining each decoded byte[] frame into gateway.onFrame&#10;- Covers accept, full fill, partial-then-rested-remainder, cancel, reject&#10;  (unknown id), and a checksum-invalid frame dropped at the gateway boundary&#10;  (SRS §5.4) with nothing reaching the ring&#10;- Assertions match the 7.5 emission model verbatim: passive-price fills,&#10;  aggressor remaining, tradeId, trailing ACCEPTED for a rested remainder&#10;- Async-safe via CapturingExecutionHandler.awaitAtLeast; deterministic order&#10;  from single-consumer FIFO + synchronous in-callback publish" />
     <MESSAGE value="feat: Phase 4 depth pipeline — deps, empty-book fix, book snapshots (P4-0..P4-2)" />
     <MESSAGE value="feat(market,publisher): add outbound subscribers MarketDataService and TradeLogger (P4-3)&#10;&#10;Wire the two non-WebSocket subscribers of SRS §3.5 onto the outbound rings.&#10;&#10;- MarketDataService: rebuilt from a BookView pull-wrapper into an&#10;  EventHandler&lt;BookSnapshotEvent&gt; push consumer on the snapshot ring. Derives&#10;  best bid/ask, midpoint, and spread inside onEvent (slot-reuse safe) and&#10;  publishes a coherent immutable Quote via a single volatile store. Midpoint&#10;  stored exactly in half-cents; getMidpoint() keeps the Phase-1 whole-cent&#10;  contract, getMidpointHalfCents() gives the exact value. Constructor now no-arg&#10;  (BookView dependency dropped).&#10;- TradeLogger: new EventHandler&lt;ExecutionEvent&gt; server-side trade tape. Emits on&#10;  ORDER_FILLED / ORDER_PARTIALLY_FILLED only, silent on accept/cancel/reject.&#10;  SLF4J boundary logging; injectable Consumer sink for testability.&#10;- Tests: MarketDataServiceTest (7), TradeLoggerTest (8) — all green." />
     <MESSAGE value="feat(net): Netty WebSocket server scaffold with /ws and shared ChannelGroup (P4-4)&#10;&#10;Stand up the SRS §3.6 WebSocket edge; no business logic yet.&#10;&#10;- WebSocketServer: ServerBootstrap on a single-thread boss + single-thread&#10;  worker group (decision 2 — preserves the single inbound producer). Pipeline is&#10;  HttpServerCodec -&gt; HttpObjectAggregator -&gt; WebSocketServerProtocolHandler(&quot;/ws&quot;)&#10;  -&gt; WebSocketFrameHandler. Owns a DefaultChannelGroup exposed via getChannelGroup()&#10;  for the P4-6 publisher to fan out over. start()/stop(), boundPort() for&#10;  ephemeral-port tests. ws://, no TLS.&#10;- WebSocketFrameHandler: registers the channel in the group on HandshakeComplete&#10;  (not channelActive, so a still-upgrading HTTP channel never joins the broadcast&#10;  group); DefaultChannelGroup auto-removes on close. channelRead0 is a stub for P4-5.&#10;- Uses the Netty 4.2 event-loop API (MultiThreadIoEventLoopGroup + NioIoHandler,&#10;  since NioEventLoopGroup is deprecated in 4.2).&#10;- Tests: WebSocketFrameHandlerTest (EmbeddedChannel membership contract) and&#10;  WebSocketServerTest (real loopback handshake join/leave). All green." />
@@ -692,6 +700,7 @@
     <MESSAGE value="Added README.md" />
     <MESSAGE value="feat(clock): implement EpochNanoClock and wire shared instance (P7-1)&#10;&#10;Add EpochNanoClock — an affine epoch-nanos clock that anchors on&#10;System.currentTimeMillis() once at construction then advances via&#10;System.nanoTime() — so all timestamp sites (gateway receipt stamp,&#10;engine EXEC/BOOK stamps) share a single epoch-nanos domain.&#10;&#10;Wire one shared EpochNanoClock through Main into both OrderGateway and&#10;MatchingEngineHandler. Two-arg constructors on both classes are now&#10;public (previously package-private) to allow injection from the root&#10;package. The affine design preserves exact receipt→publish deltas for&#10;the §6.3 latency benchmark while landing absolute timestamps in a&#10;readable epoch domain.&#10;&#10;Add EpochNanoClockTest covering: affine-delta preservation, millis→nanos&#10;anchor conversion, non-decreasing output, and real-clock sanity bounds." />
     <MESSAGE value="Some oopsies: merge conflicts due to outdated code in system, deleted dependencies during restructure, intellij pointing to deleted files." />
-    <option name="LAST_COMMIT_MESSAGE" value="Some oopsies: merge conflicts due to outdated code in system, deleted dependencies during restructure, intellij pointing to deleted files." />
+    <MESSAGE value="Nothing significant." />
+    <option name="LAST_COMMIT_MESSAGE" value="Nothing significant." />
   </component>
 </project>
