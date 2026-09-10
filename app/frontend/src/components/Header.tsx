@@ -16,11 +16,11 @@
  * The derivation is a pure exported helper (mirrors P5-2 buildLadder / P5-4
  * validateOrderInput) so it is unit-tested without a DOM. Spread cents/bps and
  * change stay local pure helpers here; the midpoint formatter moved to format.ts
- * in P7-4 so this header and the depth-ladder divider share one definition
- * instead of each keeping its own.
+ * in P7-4 and the wall-clock formatter in P7-6, so this header, the depth-ladder
+ * divider, and the trade tape share one definition instead of each keeping its own.
  */
 
-import { centsToDollars, EMPTY_PRICE, midpointLabel } from "../format";
+import { centsToDollars, EMPTY_PRICE, formatClockNanos, midpointLabel } from "../format";
 import { ConnectionBadge } from "./ConnectionBadge";
 import type { BookState, ConnectionStatus, TapeEntry } from "../state/reducer";
 
@@ -106,20 +106,6 @@ function changeLabel(lastCents: number, sessionOpenCents: number): ChangeParts {
     const pctValue = (deltaCents / sessionOpenCents) * 100;
     const pct = `${deltaCents > 0 ? "+" : ""}${pctValue.toFixed(2)}%`;
     return { abs, pct, dir };
-}
-
-/**
- * Epoch-nanos to wall-clock HH:MM:SS.mmm in local time. Possible only because
- * P7-1 moved every timestamp into the epoch-nanos domain; the old monotonic
- * origin could not render wall-clock, and that frontend/README limitation is now
- * retired. EMPTY_PRICE when no frame has arrived (0).
- */
-function formatClockNanos(nanos: number): string {
-    if (nanos <= 0) return EMPTY_PRICE;
-    const ms = Math.floor(nanos / 1_000_000);
-    const d = new Date(ms);
-    const pad = (n: number, w = 2): string => String(n).padStart(w, "0");
-    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
 }
 
 /** Pure, exported: every header field from one state slice. */

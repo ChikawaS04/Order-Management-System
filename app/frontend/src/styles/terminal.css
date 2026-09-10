@@ -1,5 +1,6 @@
 /*
- * OMS trading terminal theme (P5-5, header reworked P7-3, depth ladder P7-4).
+ * OMS trading terminal theme (P5-5, header reworked P7-3, depth ladder P7-4,
+ * trade tape P7-6).
  *
  * Subject: a live limit-order-book terminal for one instrument (ASML), built as
  * a low-latency-systems portfolio piece; the reader is an engineer. The one bold
@@ -468,36 +469,135 @@ body {
     color: var(--text);
 }
 
-/* ---- trade tape ----------------------------------------------------------- */
+/* ---- trade tape (P7-6: time, tick colour, filters, side) ------------------ */
 
 .trade-tape {
     display: flex;
     flex-direction: column;
     min-height: 0;
     flex: 1;
-    overflow-y: auto;
     font-size: 13px;
 }
 
-.trade-tape__row {
+/* Controls: block-size filter + precision toggle. Quiet, above the tape. */
+.trade-tape__controls {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 8px;
+    padding: 0 8px 6px;
+}
+
+.trade-tape__filter {
+    display: inline-flex;
+    gap: 4px;
+}
+
+.trade-tape__filter-btn,
+.trade-tape__precision {
+    padding: 2px 8px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    background: var(--surface-2);
+    color: var(--text-dim);
+    font-family: var(--sans);
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.trade-tape__filter-btn--active {
+    border-color: var(--focus);
+    color: var(--text);
+}
+
+.trade-tape__precision {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    min-width: 34px;
+    text-align: center;
+}
+
+/* Four columns shared by the head and every row: time, price, size, side. */
+.trade-tape__head,
+.trade-tape__row {
+    display: grid;
+    grid-template-columns: auto 1fr auto 42px;
+    column-gap: 12px;
+    align-items: center;
+}
+
+.trade-tape__head {
+    padding: 0 8px 4px;
+    font-family: var(--sans);
+    font-size: 9px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    border-bottom: 1px solid var(--line);
+}
+
+.trade-tape__head-price,
+.trade-tape__head-qty,
+.trade-tape__head-side {
+    text-align: right;
+}
+
+/* The scrolling body; controls and head stay put above it. */
+.trade-tape__rows {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.trade-tape__row {
     height: 22px;
     padding: 0 8px;
     border-bottom: 1px solid var(--line);
 }
 
+.trade-tape__time {
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+}
+
 .trade-tape__price {
+    text-align: right;
+    color: var(--text);
+}
+
+/* Tick direction against the previous print: up = bid green, down = ask red,
+   flat = neutral. Same tokens as the ladder, never the focus blue. */
+.trade-tape__price--up {
+    color: var(--bid);
+}
+
+.trade-tape__price--down {
+    color: var(--ask);
+}
+
+.trade-tape__price--flat {
     color: var(--text);
 }
 
 .trade-tape__qty {
+    text-align: right;
     color: var(--text-dim);
 }
 
-/* Own trades: a left marker in the focus blue, neither bid nor ask, so it
-   reads as "mine" rather than a side. */
+/* Aggressor side, own trades only (no side is on the wire). Plain text, not a
+   green/red side colour, so it never competes with the tick or the mine marker. */
+.trade-tape__side {
+    text-align: right;
+    color: var(--text-dim);
+    font-family: var(--sans);
+    font-size: 11px;
+}
+
+/* Own trades: a left marker in the focus blue, neither bid nor ask, so it reads
+   as "mine" rather than a side. Mine wins over the tick colour on the price
+   (specificity 0,2,0 vs the 0,1,0 tick rules above). */
 .trade-tape__row--mine {
     border-left: 2px solid var(--focus);
     padding-left: 6px;

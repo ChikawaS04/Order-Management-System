@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { centsToDollars, dollarsToCents, EMPTY_PRICE, midpointCents, midpointLabel } from '../src/format'
+import {
+    centsToDollars,
+    dollarsToCents,
+    EMPTY_PRICE,
+    formatClockNanos,
+    midpointCents,
+    midpointLabel,
+} from '../src/format'
 
 describe('centsToDollars', () => {
     it('formats sub-dollar values with a leading zero', () => {
@@ -67,6 +74,40 @@ describe('midpointCents', () => {
         expect(midpointCents(-1, 15025)).toBeNull()
         expect(midpointCents(15000, -1)).toBeNull()
         expect(midpointCents(-1, -1)).toBeNull()
+    })
+})
+
+describe('formatClockNanos', () => {
+    it('blanks when no frame has arrived', () => {
+        expect(formatClockNanos(0)).toBe(EMPTY_PRICE)
+        expect(formatClockNanos(-1)).toBe(EMPTY_PRICE)
+    })
+
+    it('renders HH:MM:SS.mmm shape at millisecond precision (default)', () => {
+        // Real epoch magnitude exceeds Number.MAX_SAFE_INTEGER, so assert the shape,
+        // exactly as header.test.ts does; milliseconds are exact and the value is real.
+        expect(formatClockNanos(1_700_000_000_123_456_789)).toMatch(/^\d{2}:\d{2}:\d{2}\.\d{3}$/)
+    })
+
+    it('renders nine fractional digits at nanosecond precision', () => {
+        expect(formatClockNanos(1_700_000_000_123_456_789, 'ns')).toMatch(/^\d{2}:\d{2}:\d{2}\.\d{9}$/)
+    })
+
+    it('extracts sub-second digits with exact integer math (small exact values)', () => {
+        // Below 2^53 the value is exact, so the fractional digits are asserted exactly.
+        // The wall-clock H:M:S is timezone-dependent, so only the fraction is pinned.
+        expect(formatClockNanos(7, 'ns')).toMatch(/\.000000007$/)
+        expect(formatClockNanos(999_999, 'ns')).toMatch(/\.000999999$/)
+        expect(formatClockNanos(1_000_000_000 + 123_456_789, 'ns')).toMatch(/\.123456789$/)
+    })
+
+    it('rolls the wall clock over local midnight', () => {
+        // Anchor to a local Date so the assertion is timezone-independent. A +0.5ms
+        // cushion keeps floor(nanos / 1e6) exact despite double rounding at this
+        // magnitude, so the displayed second is deterministic.
+        const before = new Date(2026, 0, 2, 23, 59, 59, 500).getTime()
+        expect(formatClockNanos(before * 1_000_000 + 500_000)).toBe('23:59:59.500')
+        expect(formatClockNanos((before + 1000) * 1_000_000 + 500_000)).toBe('00:00:00.500')
     })
 })
 

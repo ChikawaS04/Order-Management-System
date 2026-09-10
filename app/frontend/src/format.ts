@@ -127,3 +127,37 @@ export function dollarsToCents(input: string): number | null {
 
     return cents
 }
+
+/** Clock display precision: milliseconds (default) or full nanoseconds. */
+export type ClockPrecision = 'ms' | 'ns'
+
+/**
+ * Epoch-nanos to a wall-clock time string in local time.
+ *
+ * At 'ms' (default) this is HH:MM:SS.mmm, byte-identical to the P7-3 header
+ * clock whose logic moved here in P7-6 so the header and the trade tape share
+ * one formatter instead of duplicating it. At 'ns' it extends to nine fractional
+ * digits (HH:MM:SS.nnnnnnnnn); the sub-second part is taken by exact BigInt
+ * integer math from the value in state, and H:M:S comes from Date so local time
+ * and midnight rollover are handled once.
+ *
+ * Precision limit, stated rather than hidden: a real epoch-nanos value (~1.75e18
+ * in 2026) exceeds Number.MAX_SAFE_INTEGER, so it arrives already rounded by the
+ * JSON-number transport (an IEEE-754 double, ULP ~256 ns near 2026). Milliseconds
+ * are exact; digits below roughly a microsecond reflect that transport rounding,
+ * not engine truth. True nanosecond fidelity would need a string-encoded wire
+ * timestamp, which is out of P7-6 scope. EMPTY_PRICE when no frame has arrived.
+ */
+export function formatClockNanos(nanos: number, precision: ClockPrecision = 'ms'): string {
+    if (nanos <= 0) return EMPTY_PRICE
+    const ms = Math.floor(nanos / 1_000_000)
+    const d = new Date(ms)
+    const pad = (n: number, w = 2): string => String(n).padStart(w, '0')
+    const hms = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+    if (precision === 'ms') {
+        return `${hms}.${pad(d.getMilliseconds(), 3)}`
+    }
+    // Nanoseconds within the second, exact integer math on the value in state.
+    const withinSecond = Number(BigInt(Math.trunc(nanos)) % 1_000_000_000n)
+    return `${hms}.${pad(withinSecond, 9)}`
+}

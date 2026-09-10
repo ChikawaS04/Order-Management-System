@@ -73,6 +73,15 @@ export interface TapeEntry {
     readonly timestamp: number;
     /** True when either side of the trade is one of this client's orders. */
     readonly mine: boolean;
+    /**
+     * Aggressor side (P7-6), derived client-side where knowable. No EXEC frame
+     * carries a side, so this is set only when one of our own orders is in the
+     * trade: our side when we are the aggressor, the opposite when we are the
+     * passive side (a trade always crosses a buy against a sell). undefined for
+     * anonymous prints. That derivable set equals `mine`, so the tag shows on
+     * own-trade rows only.
+     */
+    readonly aggressorSide?: Side;
 }
 
 /**
@@ -147,6 +156,33 @@ export type Action =
     | { readonly type: "FRAME"; readonly frame: ServerFrame }
     | { readonly type: "SENT"; readonly frame: ClientFrame };
 
+/**
+ * Aggressor side for a fill, at the only fidelity the wire supports (P7-6).
+ *
+ * No EXEC frame carries a side, so the aggressor's side is knowable only when one
+ * of this client's own orders is in the trade: if we are the aggressor it is our
+ * order's side; if we are the passive side it is the opposite, since a trade
+ * always crosses a buy against a sell. Foreign-vs-foreign trades return undefined.
+ * The derivable set is exactly the `mine` set, so a side tag appears precisely on
+ * the own-trade rows and nowhere else. Pure and exported for direct unit testing.
+ */
+export function aggressorSideFor(
+    myOrders: readonly MyOrder[],
+    aggressorOrderId: number,
+    passiveOrderId: number,
+): Side | undefined {
+    const sideOf = (id: number): Side | undefined =>
+        id > 0 ? myOrders.find((o) => o.clOrdId === id)?.side : undefined;
+
+    const aggressor = sideOf(aggressorOrderId);
+    if (aggressor !== undefined) return aggressor;
+
+    const passive = sideOf(passiveOrderId);
+    if (passive !== undefined) return passive === "BUY" ? "SELL" : "BUY";
+
+    return undefined;
+}
+
 /** Status transition for one EXEC applied to one of my orders. */
 function nextOrder(order: MyOrder, frame: ExecFrame): MyOrder {
     if (isTerminal(order.status)) return order;
@@ -189,6 +225,7 @@ function applyExec(state: AppState, frame: ExecFrame): AppState {
             passiveOrderId: frame.passiveOrderId,
             timestamp: frame.timestamp,
             mine: knows(frame.aggressorOrderId) || knows(frame.passiveOrderId),
+            aggressorSide: aggressorSideFor(state.myOrders, frame.aggressorOrderId, frame.passiveOrderId),
         };
         tape = [entry, ...state.tape].slice(0, TAPE_CAP);
 

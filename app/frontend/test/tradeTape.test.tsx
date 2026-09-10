@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import { TradeTape } from "../src/components/TradeTape";
 import { EMPTY_PRICE } from "../src/format";
@@ -17,7 +17,7 @@ function entry(overrides: Partial<TapeEntry> = {}): TapeEntry {
         quantity: 10,
         aggressorOrderId: 2,
         passiveOrderId: 1,
-        timestamp: 0,
+        timestamp: 1_700_000_000_123_000_000,
         mine: false,
         ...overrides,
     };
@@ -28,6 +28,15 @@ function priceOf(row: HTMLElement): string {
 }
 function qtyOf(row: HTMLElement): string {
     return row.querySelector(".trade-tape__qty")!.textContent ?? "";
+}
+function timeOf(row: HTMLElement): string {
+    return row.querySelector(".trade-tape__time")!.textContent ?? "";
+}
+function sideOf(row: HTMLElement): string {
+    return row.querySelector(".trade-tape__side")!.textContent ?? "";
+}
+function priceClassOf(row: HTMLElement): string {
+    return row.querySelector(".trade-tape__price")!.className;
 }
 
 describe("TradeTape", () => {
@@ -75,9 +84,62 @@ describe("TradeTape", () => {
         expect(rows[1].className).not.toContain("trade-tape__row--mine");
     });
 
-    it("never renders a side (no EXEC carries one; omitted by design)", () => {
-        const { container } = render(<TradeTape tape={[entry({ mine: true })]} />);
-        expect(container.textContent).not.toMatch(/BUY|SELL/);
+    it("tags the aggressor side on own trades only, blank on anonymous prints", () => {
+        // P7-6 deliberately, partially reverses the P5-3 side omission: side is shown
+        // exactly where it is derivable (own-trade rows), and nowhere else.
+        const tape = [
+            entry({ tradeId: 2, mine: true, aggressorSide: "BUY" }),
+            entry({ tradeId: 1, mine: false }),
+        ];
+        render(<TradeTape tape={tape} />);
+        const rows = screen.getAllByTestId("tape-row");
+        expect(sideOf(rows[0])).toBe("BUY");
+        expect(sideOf(rows[1])).toBe("");
+    });
+
+    it("renders a local wall-clock time at millisecond precision by default", () => {
+        render(<TradeTape tape={[entry({ timestamp: 1_700_000_000_123_000_000 })]} />);
+        expect(timeOf(screen.getByTestId("tape-row"))).toMatch(/^\d{2}:\d{2}:\d{2}\.\d{3}$/);
+    });
+
+    it("toggles the time column to full nanoseconds", () => {
+        render(<TradeTape tape={[entry({ timestamp: 1_700_000_000_123_000_000 })]} />);
+        expect(timeOf(screen.getByTestId("tape-row"))).toMatch(/^\d{2}:\d{2}:\d{2}\.\d{3}$/);
+        fireEvent.click(screen.getByTestId("tape-precision"));
+        expect(timeOf(screen.getByTestId("tape-row"))).toMatch(/^\d{2}:\d{2}:\d{2}\.\d{9}$/);
+    });
+
+    it("filters by block size, strict-greater, preserving order", () => {
+        const tape = [
+            entry({ tradeId: 3, quantity: 700 }),
+            entry({ tradeId: 2, quantity: 300 }),
+            entry({ tradeId: 1, quantity: 100 }),
+        ];
+        render(<TradeTape tape={tape} />);
+        expect(screen.getAllByTestId("tape-row")).toHaveLength(3);
+
+        fireEvent.click(screen.getByTestId("tape-filter-gt200"));
+        expect(screen.getAllByTestId("tape-row").map(qtyOf)).toEqual(["700", "300"]);
+
+        fireEvent.click(screen.getByTestId("tape-filter-gt500"));
+        expect(screen.getAllByTestId("tape-row").map(qtyOf)).toEqual(["700"]);
+
+        fireEvent.click(screen.getByTestId("tape-filter-all"));
+        expect(screen.getAllByTestId("tape-row")).toHaveLength(3);
+    });
+
+    it("colours each price against the previous (older) print", () => {
+        // newest-first: 150.20 (up vs 150.10), 150.10 (flat vs 150.10), 150.10 (oldest, flat)
+        const tape = [
+            entry({ tradeId: 3, priceCents: 15020 }),
+            entry({ tradeId: 2, priceCents: 15010 }),
+            entry({ tradeId: 1, priceCents: 15010 }),
+        ];
+        render(<TradeTape tape={tape} />);
+        const rows = screen.getAllByTestId("tape-row");
+        expect(priceClassOf(rows[0])).toContain("trade-tape__price--up");
+        expect(priceClassOf(rows[1])).toContain("trade-tape__price--flat");
+        expect(priceClassOf(rows[2])).toContain("trade-tape__price--flat");
     });
 
     it("renders an empty state cleanly with no rows", () => {
