@@ -1,6 +1,6 @@
 /*
  * OMS trading terminal theme (P5-5, header reworked P7-3, depth ladder P7-4,
- * trade tape P7-6).
+ * trade tape P7-6, order entry P7-7).
  *
  * Subject: a live limit-order-book terminal for one instrument (ASML), built as
  * a low-latency-systems portfolio piece; the reader is an engineer. The one bold
@@ -614,7 +614,7 @@ body {
     font-size: 12px;
 }
 
-/* ---- order entry ---------------------------------------------------------- */
+/* ---- order entry (P7-7: chips, nudges, presets, clOrdId) ------------------ */
 
 .order-entry {
     display: grid;
@@ -654,6 +654,140 @@ body {
     color: var(--ask);
 }
 
+/* Reference chips: populate the limit from the live bid / mid / ask. */
+.order-entry__chips {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+}
+
+.order-entry__chip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    padding: 5px 0;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    background: var(--surface-2);
+    color: var(--text);
+    cursor: pointer;
+}
+
+.order-entry__chip:hover:not(:disabled) {
+    border-color: var(--focus);
+}
+
+.order-entry__chip:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.order-entry__chip-label {
+    font-family: var(--sans);
+    font-size: 9px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+}
+
+.order-entry__chip-value {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.order-entry__chip--bid .order-entry__chip-value {
+    color: var(--bid);
+}
+
+.order-entry__chip--ask .order-entry__chip-value {
+    color: var(--ask);
+}
+
+/* Field head: label plus its FIX tag caption. */
+.order-entry__field-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.order-entry__tag {
+    font-family: var(--sans);
+    font-size: 9px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+/* Price row: nudge, input, nudge. The input keeps its own class and behaviour. */
+.order-entry__price-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 6px;
+    align-items: stretch;
+}
+
+.order-entry__nudge {
+    width: 28px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    background: var(--surface-2);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.order-entry__nudge:hover:not(:disabled) {
+    border-color: var(--focus);
+}
+
+.order-entry__nudge:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+/* The integer-cents primitive, shown so the storage decision is visible. */
+.order-entry__primitive {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-faint);
+}
+
+/* Quantity presets: quick-fill an empty size. */
+.order-entry__presets {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+}
+
+.order-entry__preset {
+    padding: 4px 0;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    background: var(--surface-2);
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.order-entry__preset:hover:not(:disabled) {
+    border-color: var(--focus);
+    color: var(--text);
+}
+
+.order-entry__preset:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
 .order-entry__field {
     display: flex;
     flex-direction: column;
@@ -677,6 +811,35 @@ body {
 }
 
 .order-entry__input::placeholder {
+    color: var(--text-faint);
+}
+
+/* Explicit client-assigned ClOrdId (Tag 11): the id the next NEW will use. */
+.order-entry__clordid {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 6px 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface-2);
+}
+
+.order-entry__clordid-value {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.order-entry__clordid-note {
+    font-family: var(--sans);
+    font-size: 9px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
     color: var(--text-faint);
 }
 
@@ -706,6 +869,89 @@ body {
 
 .order-entry__error {
     grid-column: 1 / -1;
+    padding: 7px 9px;
+    border: 1px solid var(--ask);
+    border-radius: var(--radius);
+    background: var(--ask-bar);
+    color: var(--ask);
+    font-size: 12px;
+}
+
+/* ---- cancel ticket (P7-7) ------------------------------------------------- */
+
+.cancel-ticket {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.cancel-ticket__field {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.cancel-ticket__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.cancel-ticket__label {
+    font-size: 10px;
+    color: var(--text-dim);
+}
+
+.cancel-ticket__tag {
+    font-family: var(--sans);
+    font-size: 9px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+.cancel-ticket__input {
+    width: 100%;
+    padding: 7px 8px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 14px;
+    text-align: right;
+}
+
+.cancel-ticket__input::placeholder {
+    color: var(--text-faint);
+}
+
+.cancel-ticket__submit {
+    padding: 9px 0;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    background: var(--surface-2);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.cancel-ticket__submit:hover:not(:disabled) {
+    border-color: var(--ask);
+    color: var(--ask);
+}
+
+.cancel-ticket__input:disabled,
+.cancel-ticket__submit:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.cancel-ticket__error {
     padding: 7px 9px;
     border: 1px solid var(--ask);
     border-radius: var(--radius);

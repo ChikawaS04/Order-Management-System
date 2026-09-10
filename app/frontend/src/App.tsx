@@ -17,6 +17,13 @@
  * P7-4: the depth ladder also takes the last-trade price (the newest tape print,
  * or -1 before the first trade) for its spread/mid/last divider row; that is the
  * only value it needs beyond the BOOK slice.
+ *
+ * P7-7: OrderEntry gains bid/mid/ask reference chips and an explicit clOrdId
+ * field, so App passes the live book tops (integer cents) and the non-consuming
+ * `nextClOrdId.peek()` as display-only props; consumption still happens only at
+ * send via `nextClOrdId()`. A manual cancel-by-OrigClOrdID ticket (CancelTicket)
+ * is added to the controls panel and shares the same `handleCancel` path as the
+ * per-row cancel, so the two never diverge.
  */
 
 import { useOrderBook } from "./state/useOrderBook";
@@ -28,6 +35,7 @@ import { DepthLadder } from "./components/DepthLadder";
 import { TradeTape } from "./components/TradeTape";
 import { OrderEntry } from "./components/OrderEntry";
 import { OpenOrders } from "./components/OpenOrders";
+import { CancelTicket } from "./components/CancelTicket";
 
 import "./styles/terminal.css";
 
@@ -73,9 +81,17 @@ export default function App() {
 
                 <section className="panel panel--controls" aria-label="Trading">
                     <h2 className="panel__title">Order entry</h2>
-                    <OrderEntry onSubmit={handleSubmit} disabled={!connected} />
+                    <OrderEntry
+                        onSubmit={handleSubmit}
+                        disabled={!connected}
+                        bestBidCents={state.book.bestBid}
+                        bestAskCents={state.book.bestAsk}
+                        clOrdIdPreview={nextClOrdId.peek()}
+                    />
                     <h2 className="panel__title panel__title--spaced">Open orders</h2>
                     <OpenOrders orders={state.myOrders} onCancel={handleCancel} />
+                    <h2 className="panel__title panel__title--spaced">Cancel by ID</h2>
+                    <CancelTicket onCancel={handleCancel} disabled={!connected} />
                 </section>
             </main>
         </div>

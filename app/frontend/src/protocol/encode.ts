@@ -1,10 +1,16 @@
 /**
- * Outbound frame construction and ClOrdID generation.
+ * Outbound client frame builders and the client-owned ClOrdID source.
  *
- * ClOrdID must be numeric (Phase 3 parses tag 11 directly to a Java long) and
- * is client-owned. The counter is seeded at Date.now() so a page reload cannot
- * collide with orders still resting on the server from before the refresh, and
- * every outbound message — cancels included — consumes an id.
+ * clOrdId is client-owned, numeric, and monotonic. The counter is seeded at
+ * Date.now() so a page reload cannot collide with orders still resting on the
+ * server from before the refresh, and every outbound message (cancels included)
+ * consumes an id. It is generated in exactly one place and never derived from
+ * server data.
+ *
+ * P7-7 adds a non-consuming peek() to the generator so the order ticket can show
+ * the id the next send will use WITHOUT advancing the sequence. Only a call to
+ * the generator itself consumes an id; peek() never does. Generation stays here;
+ * the ticket only reads and displays the peeked value.
  */
 
 import { SYMBOL } from "./messages";
@@ -16,23 +22,35 @@ function requirePositiveInt(value: number, label: string): void {
     }
 }
 
+/** A monotonic id source: callable for the next id, with a non-consuming peek. */
+export interface ClOrdIdGenerator {
+    (): number;
+    /** The id the next call will return, without consuming it. */
+    peek(): number;
+}
+
 /**
  * Builds an independent monotonic generator. The exported `nextClOrdId` is the
  * app-wide instance; tests build their own with a fixed seed for determinism.
+ * The returned value is callable (each call yields the next id) and carries a
+ * `peek()` that reads the next id without advancing, so the ticket can display
+ * the id a send will use without consuming the sequence early.
  */
-export function createClOrdIdGenerator(seed: number = Date.now()): () => number {
+export function createClOrdIdGenerator(seed: number = Date.now()): ClOrdIdGenerator {
     requirePositiveInt(seed, "clOrdId seed");
     let next = seed;
-    return () => {
+    const gen = (() => {
         if (!Number.isSafeInteger(next)) {
             throw new RangeError("clOrdId exhausted the safe-integer range");
         }
         return next++;
-    };
+    }) as ClOrdIdGenerator;
+    gen.peek = () => next;
+    return gen;
 }
 
 /** App-wide ClOrdID source. Generated in exactly one place; never derived from server data. */
-export const nextClOrdId: () => number = createClOrdIdGenerator();
+export const nextClOrdId: ClOrdIdGenerator = createClOrdIdGenerator();
 
 /** `price` is integer cents — the server converts to FIX decimal dollars. */
 export function newOrderFrame(
