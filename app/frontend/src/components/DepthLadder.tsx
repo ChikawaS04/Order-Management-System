@@ -21,13 +21,15 @@
  *
  * Cents in, dollars only at this render edge via format.ts. No float price math.
  * midpointLabel is imported from format.ts so this divider and the P7-3 header
- * share one half-cent-safe definition. Sentinels never surface: rows are always
- * real levels (BOOK is trimmed to the valid prefix server-side and replaced
- * wholesale), and spread, mid, and last are each guarded before formatting.
+ * share one half-cent-safe definition. cumulate moved to depth.ts in P7-5 so the
+ * ladder and the depth curve share one cumulation. Sentinels never surface: rows
+ * are always real levels (BOOK is trimmed to the valid prefix server-side and
+ * replaced wholesale), and spread, mid, and last are each guarded before formatting.
  */
 
 import { useState } from "react";
 
+import { cumulate, type CumLevel } from "../depth";
 import { centsToDollars, EMPTY_PRICE, midpointLabel } from "../format";
 import type { BookState } from "../state/reducer";
 import type { Level } from "../protocol/messages";
@@ -52,23 +54,6 @@ export interface LadderRow {
 export interface LadderModel {
     readonly asks: readonly LadderRow[];
     readonly bids: readonly LadderRow[];
-}
-
-interface CumLevel {
-    readonly priceCents: number;
-    readonly qty: number;
-    readonly cumQty: number;
-}
-
-/** Running cumulative quantity, best-first (outward from the touch). */
-function cumulate(levels: readonly Level[]): CumLevel[] {
-    const rows: CumLevel[] = [];
-    let running = 0;
-    for (const level of levels) {
-        running += level[1];
-        rows.push({ priceCents: level[0], qty: level[1], cumQty: running });
-    }
-    return rows;
 }
 
 /**

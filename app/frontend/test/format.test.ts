@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { centsToDollars, dollarsToCents, EMPTY_PRICE, midpointLabel } from '../src/format'
+import { centsToDollars, dollarsToCents, EMPTY_PRICE, midpointCents, midpointLabel } from '../src/format'
 
 describe('centsToDollars', () => {
     it('formats sub-dollar values with a leading zero', () => {
@@ -49,6 +49,24 @@ describe('midpointLabel', () => {
         expect(midpointLabel(-1, 15025)).toBe(EMPTY_PRICE)
         expect(midpointLabel(15000, -1)).toBe(EMPTY_PRICE)
         expect(midpointLabel(-1, -1)).toBe(EMPTY_PRICE)
+    })
+})
+
+describe('midpointCents', () => {
+    it('returns the exact integer mid for an even-sum book', () => {
+        expect(midpointCents(15000, 15050)).toBe(15025)
+        expect(midpointCents(3, 5)).toBe(4)
+    })
+
+    it('returns the half-cent mid for an odd-sum book (positioning only)', () => {
+        expect(midpointCents(15000, 15025)).toBe(15012.5)
+        expect(midpointCents(1, 2)).toBe(1.5)
+    })
+
+    it('returns null when either side is the -1 sentinel', () => {
+        expect(midpointCents(-1, 15025)).toBeNull()
+        expect(midpointCents(15000, -1)).toBeNull()
+        expect(midpointCents(-1, -1)).toBeNull()
     })
 })
 

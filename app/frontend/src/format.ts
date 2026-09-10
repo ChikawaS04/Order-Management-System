@@ -63,6 +63,27 @@ export function midpointLabel(bestBid: number, bestAsk: number): string {
 }
 
 /**
+ * Numeric midpoint of two cent prices, for POSITIONING only, never an order
+ * price. midpointLabel above is the display string; a plotted mid marker needs a
+ * number for its coordinate, so this is computed rather than parsed back out of
+ * that string. The mid is (bid + ask) / 2, which is a half-cent (x.5) when the
+ * sum is odd; that fractional value is fine here because it is a render-edge
+ * position, not a price on the wire. Returns null unless both sides are real,
+ * guarding the -1 sentinel exactly as midpointLabel does, so a one-sided or empty
+ * book plots no marker.
+ *
+ *   15000, 15050 -> 15025
+ *   15000, 15025 -> 15012.5
+ *   -1,    15025 -> null
+ */
+export function midpointCents(bestBid: number, bestAsk: number): number | null {
+    if (bestBid <= 0 || bestAsk <= 0) {
+        return null
+    }
+    return (bestBid + bestAsk) / 2
+}
+
+/**
  * Parse a dollar string to integer cents, mirroring the backend parsePrice
  * policy (Phase 3): strictly positive, at most two decimal places, no float.
  *
