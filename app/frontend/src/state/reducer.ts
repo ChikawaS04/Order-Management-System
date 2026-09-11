@@ -27,13 +27,25 @@
  *
  * P7-8 adds the passive-fill decrement above and a client-assigned send time on
  * each order row (sentAtNanos), captured at dispatch and rendered by the blotter.
+ *
+ * P7-9 adds inspectorLog: a capped, newest-first merge of the P7-2 raw inbound
+ * FIX echoes and the outbound EXEC frames, in true arrival order. This is the
+ * one place both streams are visible together (applyExec runs for every EXEC
+ * type, not just fills, and the FIX branch is the only other frame path), so
+ * storage lives here rather than in a component ref. BOOK frames are not logged.
  */
 
 import { isFill } from "../protocol/messages";
-import type { ClientFrame, ExecFrame, Level, ServerFrame, Side } from "../protocol/messages";
+import type { ClientFrame, ExecFrame, FixFrame, Level, ServerFrame, Side } from "../protocol/messages";
 
 /** Newest-first fill history cap. */
 export const TAPE_CAP = 200;
+
+/**
+ * Newest-first inspector log cap (P7-9). Larger than TAPE_CAP because it merges
+ * two streams (every FIX echo and every EXEC frame, not fills only).
+ */
+export const INSPECTOR_CAP = 500;
 
 /** Sentinel for "no session-open price yet": no trade has printed this session. */
 const SESSION_OPEN_UNSET = -1;
@@ -108,6 +120,13 @@ export interface MyOrder {
     readonly sentAtNanos?: number;
 }
 
+/**
+ * One P7-9 inspector entry: either a raw inbound FIX echo or an outbound EXEC
+ * notification. Both already carry `type` and `timestamp`, so no wrapper is
+ * needed; the discriminant on `type` narrows exactly like ServerFrame.
+ */
+export type InspectorEntry = FixFrame | ExecFrame;
+
 export interface AppState {
     readonly connection: ConnectionStatus;
     readonly book: BookState;
@@ -140,6 +159,13 @@ export interface AppState {
      * what makes wall-clock rendering possible.
      */
     readonly lastFrameNanos: number;
+    /**
+     * FIX/EXEC inspector log (P7-9), newest first, capped at INSPECTOR_CAP. Holds
+     * both streams in true arrival order: no timestamp sort, no inference from the
+     * carried-constraint-1 independent sequence counters. BOOK frames are not
+     * logged; the inspector's filter set is FIX NEW, FIX CANCEL, and EXEC only.
+     */
+    readonly inspectorLog: readonly InspectorEntry[];
 }
 
 export const EMPTY_BOOK: BookState = {
@@ -159,6 +185,7 @@ export const initialState: AppState = {
     sessionOpenCents: SESSION_OPEN_UNSET,
     msgSeqNum: 0,
     lastFrameNanos: 0,
+    inspectorLog: [],
 };
 
 export type Action =
@@ -309,6 +336,11 @@ function applyExec(state: AppState, frame: ExecFrame): AppState {
         if (changed) myOrders = next;
     }
 
+    // Every EXEC belongs in the P7-9 inspector log, whatever its execType: the
+    // inspector's honest promise is to show the actual outbound EXEC stream, not
+    // fills only. Newest first, capped.
+    const inspectorLog = [frame, ...state.inspectorLog].slice(0, INSPECTOR_CAP);
+
     // Every EXEC is a frame received from the server, so it advances the liveness
     // marker even when it changes nothing else (a rejection for an unknown id, a
     // fill against no owned order). tape and myOrders keep their existing references
@@ -321,6 +353,7 @@ function applyExec(state: AppState, frame: ExecFrame): AppState {
         sessionVolume,
         sessionOpenCents,
         lastFrameNanos: frame.timestamp,
+        inspectorLog,
     };
 }
 
@@ -360,16 +393,19 @@ export function reducer(state: AppState, action: Action): AppState {
             if (action.status === state.connection) return state;
             // A stale ladder is worse than an empty one: any non-open state clears the
             // book. Everything else survives: myOrders and tape (those orders may still
-            // be resting server-side), and the session aggregates + liveness marker,
-            // which belong to the browser session rather than the socket. A blip must
-            // not reset volume/open/msgSeqNum out from under a surviving tape.
+            // be resting server-side), the session aggregates and liveness marker, and
+            // the P7-9 inspector log, all of which belong to the browser session rather
+            // than the socket. A blip must not reset any of them out from under a
+            // surviving tape.
             const book = action.status === "open" ? state.book : EMPTY_BOOK;
             return { ...state, connection: action.status, book };
         }
         case "FRAME": {
             const frame = action.frame;
             if (frame.type === "BOOK") {
-                // Wholesale replacement. Never merged with anything.
+                // Wholesale replacement. Never merged with anything. BOOK frames are not
+                // inspector material (P7-9): the filter set is FIX NEW, FIX CANCEL, and
+                // EXEC only, so no log entry is appended here.
                 return {
                     ...state,
                     book: {
@@ -383,11 +419,16 @@ export function reducer(state: AppState, action: Action): AppState {
                 };
             }
             if (frame.type === "FIX") {
-                // The FIX echo carries no application state (its inspector storage lands
-                // in P7-9), but it IS a frame the client received, so it advances the
-                // liveness marker and nothing else. This is the one behaviour the P7-2
-                // "inert" note anticipated changing.
-                return { ...state, lastFrameNanos: frame.timestamp };
+                // The FIX echo carries no other application state, but it IS a frame the
+                // client received (advances lastFrameNanos, P7-3) and it IS P7-9 inspector
+                // material: every inbound packet the server echoed back, newest first,
+                // capped. This is the one line the P7-2 note anticipated changing, now
+                // changed twice.
+                return {
+                    ...state,
+                    lastFrameNanos: frame.timestamp,
+                    inspectorLog: [frame, ...state.inspectorLog].slice(0, INSPECTOR_CAP),
+                };
             }
             return applyExec(state, frame);
         }

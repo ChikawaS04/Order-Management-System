@@ -1,6 +1,6 @@
 /*
  * OMS trading terminal theme (P5-5, header reworked P7-3, depth ladder P7-4,
- * trade tape P7-6, order entry P7-7, blotter P7-8).
+ * trade tape P7-6, order entry P7-7, blotter P7-8, FIX inspector modal P7-9).
  *
  * Subject: a live limit-order-book terminal for one instrument (ASML), built as
  * a low-latency-systems portfolio piece; the reader is an engineer. The one bold
@@ -126,6 +126,35 @@ body {
 
 .panel__title--spaced {
     margin-top: 18px;
+}
+
+/* ---- toolbar (P7-9: FIX inspector trigger) -------------------------------- */
+
+.toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 6px 18px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+}
+
+.toolbar__inspector-btn {
+    padding: 4px 10px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    background: var(--surface-2);
+    color: var(--text-dim);
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+}
+
+.toolbar__inspector-btn:hover {
+    border-color: var(--focus);
+    color: var(--text);
 }
 
 /* ---- header (P7-3: instrument row + session row) ------------------------- */
@@ -1037,6 +1066,249 @@ body {
     color: var(--ask);
 }
 
+/* ---- FIX stream inspector (P7-9) ------------------------------------------ */
+
+.fix-inspector__backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(4, 6, 10, 0.7);
+}
+
+.fix-inspector {
+    display: flex;
+    flex-direction: column;
+    width: min(920px, 100%);
+    max-height: min(720px, 100%);
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+
+.fix-inspector__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--line-strong);
+}
+
+.fix-inspector__title {
+    margin: 0 0 4px;
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.fix-inspector__subtitle {
+    margin: 0;
+    max-width: 620px;
+    font-family: var(--sans);
+    font-size: 11px;
+    color: var(--text-dim);
+}
+
+.fix-inspector__close {
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    background: var(--surface-2);
+    color: var(--text-dim);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.fix-inspector__close:hover {
+    border-color: var(--ask);
+    color: var(--ask);
+}
+
+.fix-inspector__filters {
+    display: flex;
+    gap: 4px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--line);
+}
+
+.fix-inspector__filter-btn {
+    padding: 2px 9px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    background: var(--surface-2);
+    color: var(--text-dim);
+    font-family: var(--sans);
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.fix-inspector__filter-btn--active {
+    border-color: var(--focus);
+    color: var(--text);
+}
+
+.fix-inspector__body {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    flex: 1;
+    min-height: 0;
+}
+
+.fix-inspector__list {
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    border-right: 1px solid var(--line);
+}
+
+.fix-inspector__row {
+    display: grid;
+    grid-template-columns: 32px 1fr auto;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 10px;
+    border: none;
+    border-bottom: 1px solid var(--line);
+    background: transparent;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 11px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.fix-inspector__row--selected {
+    background: var(--surface-2);
+    color: var(--text);
+}
+
+.fix-inspector__row-dir {
+    font-family: var(--sans);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+
+.fix-inspector__row-dir--in {
+    color: var(--bid);
+}
+
+.fix-inspector__row-dir--out {
+    color: var(--ask);
+}
+
+.fix-inspector__row-label {
+    font-family: var(--sans);
+    font-size: 11px;
+}
+
+.fix-inspector__row-time {
+    font-variant-numeric: tabular-nums;
+    color: var(--text-faint);
+    font-size: 10px;
+}
+
+.fix-inspector__detail {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 16px;
+    overflow-y: auto;
+}
+
+.fix-inspector__panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.fix-inspector__meta {
+    display: flex;
+    gap: 16px;
+    font-family: var(--sans);
+    font-size: 11px;
+    color: var(--text-dim);
+}
+
+.fix-inspector__raw {
+    margin: 0;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.fix-inspector__tags {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 11px;
+}
+
+.fix-inspector__tags th {
+    padding: 3px 8px;
+    text-align: left;
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 9px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    border-bottom: 1px solid var(--line-strong);
+}
+
+.fix-inspector__tags td {
+    padding: 3px 8px;
+    border-bottom: 1px solid var(--line);
+    color: var(--text);
+}
+
+.fix-inspector__verbatim-note,
+.fix-inspector__json-label {
+    margin: 0;
+    font-family: var(--sans);
+    font-size: 10px;
+    color: var(--text-faint);
+}
+
+.fix-inspector__copy {
+    align-self: flex-start;
+    padding: 4px 10px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    background: var(--surface-2);
+    color: var(--text-dim);
+    font-family: var(--sans);
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.fix-inspector__copy:hover {
+    border-color: var(--focus);
+    color: var(--text);
+}
+
+.fix-inspector__empty {
+    padding: 14px 10px;
+    color: var(--text-faint);
+    font-size: 12px;
+}
+
 /* ---- responsive ----------------------------------------------------------- */
 
 @media (max-width: 900px) {
@@ -1048,5 +1320,13 @@ body {
     }
     .header__session {
         gap: 12px;
+    }
+    .fix-inspector__body {
+        grid-template-columns: 1fr;
+    }
+    .fix-inspector__list {
+        max-height: 180px;
+        border-right: none;
+        border-bottom: 1px solid var(--line);
     }
 }

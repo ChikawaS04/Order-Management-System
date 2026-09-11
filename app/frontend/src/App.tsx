@@ -1,8 +1,5 @@
 /**
- * Single-screen trading terminal (SRS §3.7). Assembles the components around
- * exactly one `useOrderBook` instance and is the sole place `nextClOrdId` and the
- * frame encoders are called, keeping clOrdId generated in one place and never
- * derived from server data.
+ * Composition root. Wires the socket hook to the terminal layout.
  *
  * The `SENT` dispatch inside `send` registers a `PENDING` open-orders row and
  * advances the client MsgSeqNum, so wiring `onSubmit -> send(newOrderFrame(...))`
@@ -24,7 +21,14 @@
  * send via `nextClOrdId()`. A manual cancel-by-OrigClOrdID ticket (CancelTicket)
  * is added to the controls panel and shares the same `handleCancel` path as the
  * per-row cancel, so the two never diverge.
+ *
+ * P7-9: a slim toolbar strip between the topbar and the workspace holds the FIX
+ * inspector trigger, kept out of the three-column layout (that assembly is
+ * P7-10). The modal itself is a full-screen overlay rendered outside .workspace,
+ * controlled by local open/close state, reading state.inspectorLog directly.
  */
+
+import { useState } from "react";
 
 import { useOrderBook } from "./state/useOrderBook";
 import { cancelOrderFrame, newOrderFrame, nextClOrdId } from "./protocol/encode";
@@ -36,12 +40,14 @@ import { TradeTape } from "./components/TradeTape";
 import { OrderEntry } from "./components/OrderEntry";
 import { OpenOrders } from "./components/OpenOrders";
 import { CancelTicket } from "./components/CancelTicket";
+import { FixInspector } from "./components/FixInspector";
 
 import "./styles/terminal.css";
 
 export default function App() {
     const { state, send } = useOrderBook();
     const connected = state.connection === "open";
+    const [inspectorOpen, setInspectorOpen] = useState(false);
 
     const handleSubmit = (side: Side, priceCents: number, qty: number): void => {
         send(newOrderFrame(nextClOrdId(), side, priceCents, qty));
@@ -64,6 +70,17 @@ export default function App() {
                     connection={state.connection}
                 />
             </header>
+
+            <div className="toolbar">
+                <button
+                    type="button"
+                    className="toolbar__inspector-btn"
+                    data-testid="open-fix-inspector"
+                    onClick={() => setInspectorOpen(true)}
+                >
+                    FIX inspector
+                </button>
+            </div>
 
             <main className="workspace">
                 <section className="panel panel--ladder" aria-label="Order book depth">
@@ -94,6 +111,12 @@ export default function App() {
                     <CancelTicket onCancel={handleCancel} disabled={!connected} />
                 </section>
             </main>
+
+            <FixInspector
+                entries={state.inspectorLog}
+                open={inspectorOpen}
+                onClose={() => setInspectorOpen(false)}
+            />
         </div>
     );
 }
