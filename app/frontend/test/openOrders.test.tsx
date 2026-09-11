@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { OpenOrders } from "../src/components/OpenOrders";
 import type { MyOrder, OrderStatus } from "../src/state/reducer";
 import type { Side } from "../src/protocol/messages";
+import { EMPTY_PRICE } from "../src/format";
 
 afterEach(cleanup);
 
@@ -13,12 +14,22 @@ function makeOrder(
     side: Side = "BUY",
     priceCents = 15000,
     remainingQty = 10,
+    originalQty = 10,
+    sentAtNanos?: number,
 ): MyOrder {
-    return { clOrdId, side, priceCents, originalQty: 10, remainingQty, status };
+    return {
+        clOrdId,
+        side,
+        priceCents,
+        originalQty,
+        remainingQty,
+        status,
+        ...(sentAtNanos !== undefined ? { sentAtNanos } : {}),
+    };
 }
 
 describe("<OpenOrders />", () => {
-    it("renders one row per order with id, side, dollar price, remaining qty, and status", () => {
+    it("renders one row per order with id, side, dollar price, filled/total, and status", () => {
         render(<OpenOrders orders={[makeOrder(7, "OPEN", "BUY", 15025, 8)]} onCancel={vi.fn()} />);
 
         const rows = screen.getAllByTestId("open-orders-row");
@@ -27,8 +38,34 @@ describe("<OpenOrders />", () => {
         expect(text).toContain("7");
         expect(text).toContain("BUY");
         expect(text).toContain("150.25");
-        expect(text).toContain("8");
+        expect(text).toContain("2 / 10"); // filled 2 of original 10 (remaining 8)
         expect(text).toContain("OPEN");
+    });
+
+    it("shows filled / total derived from original minus remaining", () => {
+        render(
+            <OpenOrders
+                orders={[makeOrder(3, "PARTIALLY_FILLED", "BUY", 15000, 6, 10)]}
+                onCancel={vi.fn()}
+            />,
+        );
+        expect(screen.getByTestId("filled-3").textContent).toBe("4 / 10");
+    });
+
+    it("renders a client-assigned send time when the row carries one", () => {
+        render(
+            <OpenOrders
+                orders={[makeOrder(5, "OPEN", "BUY", 15000, 10, 10, 1_700_000_000_123_000_000)]}
+                onCancel={vi.fn()}
+            />,
+        );
+        // Local HH:MM:SS.mmm; the wall-clock hour is timezone-dependent, so assert shape.
+        expect(screen.getByTestId("sent-5").textContent).toMatch(/^\d{2}:\d{2}:\d{2}\.\d{3}$/);
+    });
+
+    it("renders an empty send-time cell when the row has none", () => {
+        render(<OpenOrders orders={[makeOrder(6, "OPEN")]} onCancel={vi.fn()} />);
+        expect(screen.getByTestId("sent-6").textContent).toBe(EMPTY_PRICE);
     });
 
     it("offers Cancel only on cancellable rows (OPEN, PARTIALLY_FILLED)", () => {

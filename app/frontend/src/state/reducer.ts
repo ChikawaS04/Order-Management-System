@@ -8,14 +8,14 @@
  *     consumers with separate sequence counters and interleave unpredictably,
  *     so book state can never be inferred from EXEC arrival order.
  *
- *  2. A passive resting order that is hit receives NO EXEC of its own. The
- *     engine fires one onFill per trade, naming the aggressor, and is silent on
- *     the passive side. Per-order fill progress therefore is not trackable for
- *     resting orders: such a row keeps its last known status and remaining
- *     quantity until it is cancelled (or silently vanishes when fully consumed,
- *     visible only as the book shrinking). This is a documented backend gap, not
- *     a client bug; a per-passive EXEC would be a server change and is out of
- *     scope.
+ *  2. A passive resting order that is hit receives no EXEC of its OWN, but the
+ *     aggressor's fill EXEC names it via passiveOrderId. The engine fires one
+ *     onFill per trade, reporting the aggressor's orderId and remainingQuantity;
+ *     the passive order's remaining is never reported and is decremented
+ *     client-side (P7-8, see passiveFill) by each matching fill's per-event
+ *     filledQuantity. EXEC stays authoritative for the aggressor; the passive
+ *     decrement is a documented client-side derivation, not a server value. A
+ *     per-passive EXEC would be a server change and is out of scope.
  *
  * Ordering WITHIN the EXEC stream is reliable (one ring, one sequence), so a
  * PARTIALLY_FILLED followed by its trailing ACCEPTED can be trusted.
@@ -24,6 +24,9 @@
  * a client-assigned msgSeqNum counter, and lastFrameNanos. The two aggregates are
  * accumulated here rather than folded from the tape, which only holds the newest
  * TAPE_CAP fills.
+ *
+ * P7-8 adds the passive-fill decrement above and a client-assigned send time on
+ * each order row (sentAtNanos), captured at dispatch and rendered by the blotter.
  */
 
 import { isFill } from "../protocol/messages";
@@ -87,7 +90,7 @@ export interface TapeEntry {
 /**
  * A locally originated order. Side and price are captured at SEND time: no EXEC
  * frame carries a side, so they cannot come from the wire. Status and remaining
- * quantity come only from EXEC.
+ * quantity come only from EXEC (plus the P7-8 passive decrement).
  */
 export interface MyOrder {
     readonly clOrdId: number;
@@ -96,6 +99,13 @@ export interface MyOrder {
     readonly originalQty: number;
     readonly remainingQty: number;
     readonly status: OrderStatus;
+    /**
+     * Client-assigned wall-clock send time in epoch nanoseconds (P7-8). Captured at
+     * dispatch by useOrderBook (Date.now lifted into the P7-1 epoch-nanos domain),
+     * never a server value. Absent on rows built without one (test fixtures); the
+     * blotter renders such a row's send time as EMPTY_PRICE.
+     */
+    readonly sentAtNanos?: number;
 }
 
 export interface AppState {
@@ -154,7 +164,7 @@ export const initialState: AppState = {
 export type Action =
     | { readonly type: "CONNECTION"; readonly status: ConnectionStatus }
     | { readonly type: "FRAME"; readonly frame: ServerFrame }
-    | { readonly type: "SENT"; readonly frame: ClientFrame };
+    | { readonly type: "SENT"; readonly frame: ClientFrame; readonly sentAtNanos?: number };
 
 /**
  * Aggressor side for a fill, at the only fidelity the wire supports (P7-6).
@@ -183,7 +193,7 @@ export function aggressorSideFor(
     return undefined;
 }
 
-/** Status transition for one EXEC applied to one of my orders. */
+/** Status transition for one EXEC applied to one of my orders (aggressor path). */
 function nextOrder(order: MyOrder, frame: ExecFrame): MyOrder {
     if (isTerminal(order.status)) return order;
 
@@ -206,6 +216,26 @@ function nextOrder(order: MyOrder, frame: ExecFrame): MyOrder {
         case "ORDER_REJECTED":
             return { ...order, status: "REJECTED" };
     }
+}
+
+/**
+ * Passive-side fill against one of our resting orders (P7-8).
+ *
+ * A passive resting order receives no EXEC of its own (carried constraint 2): the
+ * engine reports only the aggressor. So when a fill names one of our orders as the
+ * passive side, we decrement its remaining quantity locally by that fill's
+ * per-event filledQuantity (Q7-2). This is a documented client-side derivation,
+ * not a server-reported value. Remaining is clamped at zero; a decrement to zero
+ * is a full consumption (FILLED, terminal), otherwise the row is PARTIALLY_FILLED.
+ * A terminal row is never resurrected, mirroring nextOrder's aggressor guard.
+ *
+ * Pure and exported for direct unit testing (mirrors aggressorSideFor).
+ */
+export function passiveFill(order: MyOrder, filledQty: number): MyOrder {
+    if (isTerminal(order.status)) return order;
+    const remainingQty = Math.max(0, order.remainingQty - filledQty);
+    const status: OrderStatus = remainingQty === 0 ? "FILLED" : "PARTIALLY_FILLED";
+    return { ...order, remainingQty, status };
 }
 
 function applyExec(state: AppState, frame: ExecFrame): AppState {
@@ -242,21 +272,48 @@ function applyExec(state: AppState, frame: ExecFrame): AppState {
         }
     }
 
-    const index = state.myOrders.findIndex((o) => o.clOrdId === frame.orderId);
+    // Aggressor path: EXEC orderId names the aggressor on fills, and the
+    // cancelled/rejected order otherwise. Authoritative for that row.
+    const aggIndex = state.myOrders.findIndex((o) => o.clOrdId === frame.orderId);
+
+    // Passive path (P7-8): a fill's passiveOrderId names our resting order, which
+    // receives no EXEC of its own (carried constraint 2), so we decrement it
+    // locally. Guarded on isFill and passiveOrderId > 0 (client clOrdIds are always
+    // positive, so the -1 NA sentinel can never match), and on passiveOrderId !==
+    // orderId so a single frame can never drive both transitions on one row (an
+    // order never trades with itself, so on any fill aggressor != passive anyway).
+    const passiveIndex =
+        isFill(frame) && frame.passiveOrderId > 0 && frame.passiveOrderId !== frame.orderId
+            ? state.myOrders.findIndex((o) => o.clOrdId === frame.passiveOrderId)
+            : -1;
+
     let myOrders = state.myOrders;
-    if (index !== -1) {
-        const current = state.myOrders[index];
-        const updated = nextOrder(current, frame);
-        if (updated !== current) {
-            myOrders = state.myOrders.map((o, i) => (i === index ? updated : o));
-        }
+    if (aggIndex !== -1 || passiveIndex !== -1) {
+        let changed = false;
+        const next = state.myOrders.map((o, i) => {
+            if (i === aggIndex) {
+                const updated = nextOrder(o, frame);
+                if (updated !== o) changed = true;
+                return updated;
+            }
+            if (i === passiveIndex) {
+                const updated = passiveFill(o, frame.filledQuantity);
+                if (updated !== o) changed = true;
+                return updated;
+            }
+            return o;
+        });
+        // Allocate a new array only when a row actually changed, so a no-op frame
+        // keeps the myOrders slice reference (the P7-3 session/fixFrame identity
+        // checks depend on slice-level identity holding on no-op paths).
+        if (changed) myOrders = next;
     }
 
     // Every EXEC is a frame received from the server, so it advances the liveness
     // marker even when it changes nothing else (a rejection for an unknown id, a
-    // passive fill against a foreign order). tape and myOrders keep their existing
-    // references on those no-op paths, so referential-equality checks on those
-    // slices still hold; only the top-level object is newly allocated.
+    // fill against no owned order). tape and myOrders keep their existing references
+    // on those no-op paths, so referential-equality checks on those slices still
+    // hold; only the top-level object is newly allocated.
     return {
         ...state,
         tape,
@@ -267,7 +324,7 @@ function applyExec(state: AppState, frame: ExecFrame): AppState {
     };
 }
 
-function applySent(state: AppState, frame: ClientFrame): AppState {
+function applySent(state: AppState, frame: ClientFrame, sentAtNanos?: number): AppState {
     // MsgSeqNum counts every outbound frame that actually went on the wire, NEW and
     // CANCEL alike: both are real FIX messages (35=D / 35=F) and each consumes a
     // sequence number. `send` dispatches SENT only on a real socket write, so a
@@ -287,6 +344,9 @@ function applySent(state: AppState, frame: ClientFrame): AppState {
             originalQty: frame.qty,
             remainingQty: frame.qty,
             status: "PENDING",
+            // Client-assigned send time (P7-8), included only when the dispatch supplied
+            // it, so a row built without one is byte-identical to the pre-P7-8 shape.
+            ...(sentAtNanos !== undefined ? { sentAtNanos } : {}),
         };
         myOrders = [order, ...state.myOrders];
     }
@@ -332,6 +392,6 @@ export function reducer(state: AppState, action: Action): AppState {
             return applyExec(state, frame);
         }
         case "SENT":
-            return applySent(state, action.frame);
+            return applySent(state, action.frame, action.sentAtNanos);
     }
 }

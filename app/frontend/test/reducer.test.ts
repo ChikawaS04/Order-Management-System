@@ -291,8 +291,8 @@ describe("myOrders lifecycle", () => {
     });
 });
 
-describe("Q1 — passive fills produce no per-order update", () => {
-    it("leaves my resting order untouched when someone else's aggressor hits it", () => {
+describe("passive fills decrement the resting row locally (P7-8)", () => {
+    it("decrements my resting order locally when someone else's aggressor hits it", () => {
         const resting = run(
             initialState,
             sent(newOrderFrame(1, "BUY", 15000, 10)),
@@ -300,15 +300,15 @@ describe("Q1 — passive fills produce no per-order update", () => {
         );
 
         // The engine fires one onFill naming the aggressor (99); order 1 is only the
-        // passive side and receives no EXEC of its own.
+        // passive side and receives no EXEC of its own. The frame's remaining is the
+        // AGGRESSOR's; we decrement our resting order locally by filledQuantity (4).
         const after = reducer(
             resting,
             frame(fill("ORDER_FILLED", 99, 1, { tradeId: 1, price: 15000, filled: 4, remaining: 0 })),
         );
 
-        // Documented gap: the row keeps its last known status and remaining quantity.
-        expect(after.myOrders[0].status).toBe("OPEN");
-        expect(after.myOrders[0].remainingQty).toBe(10);
+        expect(after.myOrders[0].status).toBe("PARTIALLY_FILLED");
+        expect(after.myOrders[0].remainingQty).toBe(6);
         // The trade still reaches the tape, flagged as mine.
         expect(after.tape).toHaveLength(1);
         expect(after.tape[0].mine).toBe(true);

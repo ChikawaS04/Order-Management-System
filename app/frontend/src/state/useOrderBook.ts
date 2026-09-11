@@ -106,7 +106,14 @@ export function useOrderBook(url: string = import.meta.env.VITE_WS_URL ?? DEFAUL
         const ws = socketRef.current;
         if (ws === null || ws.readyState !== WebSocket.OPEN) return false;
         ws.send(serializeClientFrame(frame));
-        dispatch({ type: "SENT", frame });
+        // Client-assigned send time (P7-8), stamped only on a real write. Date.now is
+        // millisecond wall-clock lifted into the P7-1 epoch-nanos domain so the blotter
+        // renders it through the same formatClockNanos as every other timestamp. The
+        // half-millisecond term is an anti-rounding cushion, not data: Date.now()*1e6
+        // sits exactly on a millisecond boundary, where floor(nanos/1e6) at this
+        // magnitude can round down by one; the cushion makes the displayed millisecond
+        // the true send millisecond (the same device format.test.ts uses).
+        dispatch({ type: "SENT", frame, sentAtNanos: Date.now() * 1_000_000 + 500_000 });
         return true;
     }, []);
 
