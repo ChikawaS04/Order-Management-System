@@ -19,12 +19,13 @@ transcoded to FIX 4.2, framed onto the inbound Disruptor ring, matched by the si
 engine, and the results are published back onto the outbound and snapshot rings, reserialized
 to JSON, and pushed to every connected client. Inbound, the app narrows each raw frame in
 exactly one place (`protocol/messages.ts`), a pure reducer (`state/reducer.ts`) folds frames
-into `{ book, tape, myOrders, connection }`, and a single `useOrderBook` hook owns the socket
-lifecycle (connect, capped-backoff reconnect, dispatch). Every price is an integer number of
-cents internally and on the wire; dollars exist only at the render/parse edge, converted with
-string arithmetic so no floating-point error ever reaches a price. **`BOOK` frames are the
-sole authority on book state; `EXEC` frames are notifications only** — the two never
-cross-contaminate.
+into book/tape/myOrders state plus session aggregates (`sessionVolume`, `sessionOpenCents`, a
+client-assigned `msgSeqNum`) and a capped FIX/EXEC inspector log (`inspectorLog`), and a
+single `useOrderBook` hook owns the socket lifecycle (connect, capped-backoff reconnect,
+dispatch). Every price is an integer number of cents internally and on the wire; dollars
+exist only at the render/parse edge, converted with string arithmetic so no floating-point
+error ever reaches a price. **`BOOK` frames are the sole authority on book state; `EXEC`
+frames are notifications only** — the two never cross-contaminate.
 
 ---
 
@@ -54,7 +55,7 @@ The server's entry point is `Main` at the root of `src/main/java` (no package). 
 `ws://localhost:8080/ws` and logs the endpoint plus copy-pasteable sample order JSON on
 startup.
 
-- **From IntelliJ (recommended):** open the Maven project at `app/backend/`, let it sync
+- **From IntelliJ (recommended):** open the Maven project at the repo root, let it sync
   dependencies, then run `Main` via the green gutter arrow (or right-click → *Run 'Main'*).
 - **Port:** defaults to `8080`; override with a single program argument
   (e.g. run config program arguments `9090`, or `<arg>` on the CLI). Unparseable input logs a
@@ -72,7 +73,7 @@ The endpoint the frontend expects: **`ws://localhost:8080/ws`** (no TLS — `ws:
 Requires **Node 20.19+ or 22.12+** (Vite 8). Check with `node -v` first.
 
 ```bash
-cd app/frontend      # run every command from inside app/frontend/, never the repo root
+cd frontend          # run every command from inside frontend/, never the repo root
 npm install          # first run only; commits package-lock.json
 npm run dev          # → http://localhost:5173
 ```
@@ -80,16 +81,13 @@ npm run dev          # → http://localhost:5173
 Other scripts:
 
 ```bash
-npm test             # vitest run — the P5-0..P5-5 pure + component suites
+npm test             # vitest run — the pure + component suites
 npm run test:watch   # vitest in watch mode
 npm run build        # tsc (strict typecheck) && vite build
 ```
 
-The socket URL is read from `app/frontend/.env`:
-
-```
+The socket URL is read from `frontend/.env`:
 VITE_WS_URL=ws://localhost:8080/ws
-```
 
 If unset, `useOrderBook` falls back to that same default, so the app works out of the box
 against a local backend on the default port. Point `VITE_WS_URL` elsewhere to target a
@@ -168,22 +166,39 @@ These are real properties of the running system, documented rather than glossed:
   book state from EXEC arrival order and never merges EXEC into the book. This is the single
   load-bearing constraint of the frontend.
 - **A passive resting order receives no EXEC of its own.** The engine fires one fill event per
-  trade, naming only the aggressor. When your resting order is partially consumed by someone
-  else's incoming order, you get **no EXEC** — the consumption is visible only as the depth
-  ladder shrinking on the next BOOK. Consequently the Open Orders panel keeps a resting row at
-  its last known status/remaining until it is cancelled (or silently disappears from the book
-  when fully consumed). Per-passive fill reporting would be a server change and is out of
-  scope.
+  trade, naming only the aggressor; `passiveOrderId` names the resting order but its remaining
+  quantity is never reported. The blotter closes this gap client-side (P7-8): on a fill where
+  `passiveOrderId` matches one of your own orders, the row's remaining quantity is decremented
+  locally by that fill's `filledQuantity`, and the row transitions to PARTIALLY_FILLED or
+  FILLED accordingly. This is a documented client-side derivation, not a server-reported value;
+  EXEC stays the sole authority for the aggressor side of every fill. Per-passive EXEC
+  reporting would still be a server change and remains out of scope.
+- **Session change is measured against the session's first trade, never a previous close.**
+  There is no daily close on the wire (single session, no persistence across runs), so the
+  header's session-change figure, set once by the session's first fill and held in reducer
+  state, is labelled *session change*, not daily change, and never presented as one. It resets
+  only when the app reloads (a fresh in-memory session), not on a reconnect.
 - **A freshly (re)connected client sees an empty ladder until the next order event.** The
   server pushes a BOOK only per inbound event; there is no snapshot-on-connect message
   (deliberately out of scope). Place any order and the ladder repopulates. On a socket drop the
   client clears the book (a stale ladder is worse than an empty one) and reconnects with
   exponential backoff.
-- **`timestamp` is `System.nanoTime()`, not epoch time.** Despite the `<epochNanos>` label
-  used in the build guides, the backend stamps frames from a monotonic clock with an arbitrary
-  origin (the value can even be negative). It is valid only for relative ordering — **it cannot
-  be rendered as wall-clock time**, so the UI shows no absolute timestamps. Treat the guides'
-  `<epochNanos>` wording as inaccurate on this point.
+- **`timestamp` is epoch nanoseconds.** Frames are stamped by `EpochNanoClock`, which anchors
+  once at server startup (capturing `System.currentTimeMillis()` and `System.nanoTime()`
+  together) and thereafter serves `anchorEpochNanos + (System.nanoTime() - anchorNanos)`. The
+  value is true Unix epoch nanoseconds and renders directly as wall-clock time. Because the
+  transform is affine, inter-event deltas stay exact. The one caveat is anchor drift: the
+  anchor is captured once, so the clock does not follow wall-clock adjustments (NTP step or
+  slew) made after startup, and over a long-running session its absolute value can drift from
+  true wall-clock by the accumulated correction. Relative ordering and deltas are unaffected.
+- **The system is FIX inbound, JSON outbound, and the FIX inspector says so plainly.** The
+  server parses inbound FIX (`35=D` NEW, `35=F` CANCEL) but builds no outbound FIX; execution
+  reports leave the server as JSON `EXEC` frames, never as a `35=8` (ExecutionReport) tag-value
+  message. The inspector's IN/OUT badges mean order-flow direction at the matching system: a
+  FIX packet is inbound to the engine, an EXEC report is outbound from it, not the browser
+  WebSocket direction, where both arrive as inbound WebSocket messages. Inbound entries show
+  the real echoed FIX bytes the server parsed (P7-2); outbound entries show the actual EXEC
+  JSON, labelled as such, never a fabricated FIX message.
 - **No server reject feedback for malformed input.** Bad orders are logged and dropped
   server-side with no message back to the client, so the UI validates price/quantity locally
   before sending (`> 0`, `≤ 2` decimal places, positive integer qty). `ORDER_REJECTED` can
@@ -194,34 +209,35 @@ These are real properties of the running system, documented rather than glossed:
 ## Manual end-to-end checklist
 
 Run against the live backend (`Main` on `:8080`) with the frontend on `:5173`. This is the
-Phase 5 acceptance gate. (The `npm test` suites from P5-0..P5-5 should already be green as a
-precondition; they cover the pure logic and component rendering, but the round-trip below is
-what closes the phase.)
+Phase 5 acceptance gate. (The pure-logic and component-render suites should already be green
+as a precondition; they cover the reducer and rendering, but the round-trip below is what
+closes the phase. The Phase 7 acceptance run, covering the FIX inspector and the depth curve,
+is tracked separately in `Build_Guide_Phase7.md`.)
 
 1. **Start both.** Backend up on `:8080`, `npm run dev` up on `:5173`, browser open on
    `http://localhost:5173`.
 2. **Connect.** The connection badge shows **Live**.
 3. **Place a resting order** — e.g. `BUY 10 @ 150.00`.
-   - Depth ladder populates with a bid level `150.00 × 10`.
-   - Open Orders shows a row: your `clOrdId`, `BUY`, `150.00`, remaining `10`, status
-     **OPEN** (from `ORDER_ACCEPTED`, `orderId == clOrdId`).
+    - Depth ladder populates with a bid level `150.00 × 10`.
+    - Open Orders shows a row: your `clOrdId`, `BUY`, `150.00`, remaining `10`, status
+      **OPEN** (from `ORDER_ACCEPTED`, `orderId == clOrdId`).
 4. **Cross it** — e.g. `SELL 4 @ 150.00`.
-   - Trade tape shows a fill (`4 @ 150.00`).
-   - Depth ladder bid reduces `10 → 6`.
-   - The aggressor's EXEC status is reflected; the resting row's remaining follows the book.
+    - Trade tape shows a fill (`4 @ 150.00`).
+    - Depth ladder bid reduces `10 → 6`.
+    - The aggressor's EXEC status is reflected; the resting row's remaining follows the book.
 5. **Confirm out-of-order handling holds.** The visible book always matches the latest **BOOK**
    frame — never reconstructed from EXEC ordering. (Watch the console: a BOOK may land before
    its own EXEC; the ladder stays correct regardless.)
 6. **Cancel the resting order** — Cancel the `BUY` row.
-   - Row closes on `ORDER_CANCELLED` (`orderId == origClOrdId`).
-   - Depth ladder empties that level (`bestBid → —`).
+    - Row closes on `ORDER_CANCELLED` (`orderId == origClOrdId`).
+    - Depth ladder empties that level (`bestBid → —`).
 7. **Malformed input is blocked locally.** Try `150.255` (>2 decimals) or qty `0` — the order
    is rejected in the UI with a visible reason and **no frame is sent** (nothing appears in
    Open Orders, nothing on the server).
 8. **Disconnect / reconnect.** Stop the backend, then restart it.
-   - Badge transitions to **Reconnecting**, then back to **Live** when the server returns.
-   - The ladder **clears** on disconnect and stays empty until you place the next order, which
-     repopulates it (the known no-snapshot-on-connect limitation).
+    - Badge transitions to **Reconnecting**, then back to **Live** when the server returns.
+    - The ladder **clears** on disconnect and stays empty until you place the next order, which
+      repopulates it (the known no-snapshot-on-connect limitation).
 
 If every step behaves as above, the round-trip is proven end to end and Phase 5 is complete.
 
@@ -231,10 +247,14 @@ If every step behaves as above, the round-trip is proven end to end and Phase 5 
 
 - **No snapshot-on-connect.** A fresh client sees an empty ladder until the next order event
   (out of scope; §5.6).
-- **No per-passive fill reporting.** A resting order's partial consumption by others is not
-  individually reported to the client — visible only as the book shrinking.
-- **No wall-clock timestamps.** `timestamp` is a monotonic `System.nanoTime()` value, usable
-  only for ordering.
+- **No per-passive EXEC from the server.** The engine reports one fill event per trade, naming
+  only the aggressor; the passive side's remaining quantity is never reported by the server.
+  The blotter derives it client-side from `passiveOrderId` (P7-8), a documented local
+  derivation, not a server value.
+- **Timestamp anchor drift.** `timestamp` is epoch nanoseconds from a clock anchored once at
+  startup, so it does not track wall-clock adjustments (NTP) made afterward; its absolute value
+  can drift from true wall-clock over a long session. Relative ordering and inter-event deltas
+  stay exact.
 - **No reject feedback path.** Malformed input is guarded client-side; the server silently
   drops bad frames.
 - **Single instrument, no session management, no auth, no persistence** — all out of scope for
@@ -243,16 +263,3 @@ If every step behaves as above, the round-trip is proven end to end and Phase 5 
 ---
 
 ## Project layout
-
-```
-app/frontend/
-  src/
-    protocol/     # messages.ts (wire discriminated unions, parseServerFrame), encode.ts
-    state/        # reducer.ts (pure), useOrderBook.ts (socket lifecycle)
-    components/   # Header, ConnectionBadge, DepthLadder, TradeTape, OrderEntry, OpenOrders
-    format.ts     # cents <-> dollars, string-based; sentinel -> "—"
-    App.tsx       # single-screen layout around one useOrderBook instance
-    styles/       # terminal theme
-  test/           # vitest: format, protocol, reducer, and component render suites
-```
-

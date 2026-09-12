@@ -1,6 +1,7 @@
 /*
  * OMS trading terminal theme (P5-5, header reworked P7-3, depth ladder P7-4,
- * trade tape P7-6, order entry P7-7, blotter P7-8, FIX inspector modal P7-9).
+ * trade tape P7-6, order entry P7-7, blotter P7-8, FIX inspector modal P7-9,
+ * depth curve wired P7-10).
  *
  * Subject: a live limit-order-book terminal for one instrument (ASML), built as
  * a low-latency-systems portfolio piece; the reader is an engineer. The one bold
@@ -496,6 +497,23 @@ body {
     font-variant-numeric: tabular-nums;
     font-weight: 600;
     color: var(--text);
+}
+
+/* ---- depth curve (P7-10: wired below the ladder in the same panel) -------- */
+
+.depth-curve {
+    flex-shrink: 0;
+}
+
+.depth-curve__svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 2 / 1;
+}
+
+.depth-curve__hit:hover {
+    fill: rgba(76, 141, 255, 0.08);
 }
 
 /* ---- trade tape (P7-6: time, tick colour, filters, side) ------------------ */

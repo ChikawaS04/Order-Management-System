@@ -26,9 +26,15 @@
  * inspector trigger, kept out of the three-column layout (that assembly is
  * P7-10). The modal itself is a full-screen overlay rendered outside .workspace,
  * controlled by local open/close state, reading state.inspectorLog directly.
+ *
+ * P7-10: DepthCurve is wired into the ladder panel, below DepthLadder, sharing
+ * the same BOOK slice, rather than becoming a fourth workspace track. A ref to
+ * OrderEntry (entryRef) is created here for the first time, exposing the P7-7
+ * setPrice(priceCents) seam so a curve click populates the ticket with no
+ * intermediate App state: onPriceSelect={(c) => entryRef.current?.setPrice(c)}.
  */
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { useOrderBook } from "./state/useOrderBook";
 import { cancelOrderFrame, newOrderFrame, nextClOrdId } from "./protocol/encode";
@@ -36,8 +42,10 @@ import type { Side } from "./protocol/messages";
 
 import { Header } from "./components/Header";
 import { DepthLadder } from "./components/DepthLadder";
+import { DepthCurve } from "./components/DepthCurve";
 import { TradeTape } from "./components/TradeTape";
 import { OrderEntry } from "./components/OrderEntry";
+import type { OrderEntryHandle } from "./components/OrderEntry";
 import { OpenOrders } from "./components/OpenOrders";
 import { CancelTicket } from "./components/CancelTicket";
 import { FixInspector } from "./components/FixInspector";
@@ -48,6 +56,7 @@ export default function App() {
     const { state, send } = useOrderBook();
     const connected = state.connection === "open";
     const [inspectorOpen, setInspectorOpen] = useState(false);
+    const entryRef = useRef<OrderEntryHandle>(null);
 
     const handleSubmit = (side: Side, priceCents: number, qty: number): void => {
         send(newOrderFrame(nextClOrdId(), side, priceCents, qty));
@@ -89,6 +98,11 @@ export default function App() {
                         book={state.book}
                         lastCents={state.tape.length > 0 ? state.tape[0].priceCents : -1}
                     />
+                    <h2 className="panel__title panel__title--spaced">Depth curve</h2>
+                    <DepthCurve
+                        book={state.book}
+                        onPriceSelect={(priceCents) => entryRef.current?.setPrice(priceCents)}
+                    />
                 </section>
 
                 <section className="panel panel--tape" aria-label="Trade tape">
@@ -99,6 +113,7 @@ export default function App() {
                 <section className="panel panel--controls" aria-label="Trading">
                     <h2 className="panel__title">Order entry</h2>
                     <OrderEntry
+                        ref={entryRef}
                         onSubmit={handleSubmit}
                         disabled={!connected}
                         bestBidCents={state.book.bestBid}
