@@ -32,10 +32,10 @@
     --warn: #d9a441;
     --focus: #4c8dff;
 
-    --mono: "JetBrains Mono", "SFMono-Regular", "SF Mono", "Cascadia Code",
-    ui-monospace, Menlo, Consolas, monospace;
-    --sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    Helvetica, Arial, sans-serif;
+    --mono: "IBM Plex Mono", "JetBrains Mono", "SFMono-Regular", "SF Mono",
+    "Cascadia Code", ui-monospace, Menlo, Consolas, monospace;
+    --sans: "IBM Plex Sans", ui-sans-serif, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 
     --gap: 10px;
     --radius: 2px;
@@ -510,6 +510,13 @@ body {
     width: 100%;
     height: auto;
     aspect-ratio: 2 / 1;
+}
+
+/* The mid marker is a price: mono + tabular so it reads like every other price.
+   The empty-state text (.depth-curve__empty) is a status word and stays sans. */
+.depth-curve__mid-label {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
 }
 
 .depth-curve__hit:hover {
@@ -1045,6 +1052,12 @@ body {
 .open-orders__time,
 .open-orders__side {
     text-align: left;
+}
+
+/* Side (BUY / SELL) is a status word, not a number: sans, matching the trade
+   tape's Side. Overrides the mono inherited from the .open-orders__table base. */
+.open-orders__side {
+    font-family: var(--sans);
 }
 
 /* Client-assigned send time: quiet, tabular so the column locks. */
